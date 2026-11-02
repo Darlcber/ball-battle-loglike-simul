@@ -98,6 +98,10 @@
   .ev b{color:#ffd98a;font-size:15px}
   .evres{background:#232a3a;border:1px solid #4a6a9a;border-radius:8px;padding:10px;font-size:13px;line-height:1.7;white-space:pre-line}
   .mapcard{max-height:calc(100vh - 62px);overflow-y:auto;padding:4px}
+  .rwgrid{display:flex;gap:6px;align-items:stretch}.rwcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}.rwarrow{align-self:center;font-size:22px;color:#ffe066}
+  .rwgrid .pick{padding:6px 9px}.rwgrid .pick b{font-size:14px}.rwgrid .pick .small{font-size:11px}
+  .rwbar{position:sticky;bottom:0;gap:6px;background:rgba(10,12,24,.96);padding-top:4px}
+  .pick.sel{border-color:#ffe066;background:#3d3a20}.pick:disabled{opacity:.35}
   .routeg{display:flex;gap:8px;align-items:flex-start}.routeg > .mapcard{flex:1.2;min-width:0}.routeg > .rcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
   .mapsvg .me{stroke:#3a4170;stroke-width:2}.mapsvg .me.done{stroke:#8fa0ff;stroke-width:3}.mapsvg .me.hot{stroke:#7fe36a;stroke-width:3;stroke-dasharray:5 4}
   .mapsvg .mn{fill:#232a4a;stroke:#4a5290;stroke-width:2}.mapsvg .mn.av{stroke:#7fe36a;stroke-width:3;fill:#2c5a2c;animation:mpulse 1.1s ease-in-out infinite}
@@ -1284,6 +1288,14 @@ function suffixOpts(r, type, pre){
   if (type === "cond") return pickDistinct(Object.keys(SKILL), sk => SKILL[sk].rar, 3, r.rng);
   return pickDistinct(Object.keys(LAWS).filter(l => LAWS[l].fits(pre)), l => LAWS[l].rar, 3, r.rng);
 }
+const LAW_ANY = ["l_pow1", "l_pow2", "l_exec"];   // 어떤 개체에도 붙는 법칙
+function suffixOptsFor(r, type, pres){   // 앞자리 3개를 보고 뒷자리 3개를 한꺼번에 뽑음 (법칙은 적어도 하나가 셋 모두에 맞게)
+  if (type === "cond") return pickDistinct(Object.keys(SKILL), sk => SKILL[sk].rar, 3, r.rng);
+  const o = pickDistinct(Object.keys(LAWS).filter(l => pres.some(p => LAWS[l].fits(p))), l => LAWS[l].rar, 3, r.rng);
+  if (!o.some(l => LAW_ANY.includes(l))){ const a = pickDistinct(LAW_ANY.filter(l => !o.includes(l)), l => LAWS[l].rar, 1, r.rng)[0]; o[o.length - 1] = a; }
+  return o;
+}
+const sentFits = (type, pre, suf) => type !== "law" || LAWS[suf].fits(pre);
 function randomSent(r){ const type = r.rng() < 0.5 ? "law" : "cond", pre = prefixOpts(r, type)[0]; return mkSent(r, type, pre, suffixOpts(r, type, pre)[0]); }
 const preLabel = (type, id) => type === "law" ? SK_FULL(id) : COND2[id].label;
 const sufLabel = (type, id) => type === "law" ? LAWS[id].label : SK_FULL(id);
@@ -1778,9 +1790,10 @@ const condScore = id => 3.2 - COND2[id].rar, skillScore = sk => (SKILL[sk].g ===
 const LAW_SCORE = { l_twin: 4, l_pow2: 3, l_exec: 2.2, l_pow1: 2, l_speed: 1.2, l_size: 1.2 };
 function botReward(r, smart, rng){
   const type = rollSentType(r), best = (opts, sc) => smart ? opts.slice().sort((a, b) => sc(b) - sc(a))[0] : opts[Math.floor(rng() * opts.length)];
-  const pre = best(prefixOpts(r, type), id => type === "law" ? (usedSkills(r).includes(id) ? 2 : 0) + skillScore(id) : condScore(id));
-  const suf = best(suffixOpts(r, type, pre), id => type === "law" ? LAW_SCORE[id] : skillScore(id));
-  if (smart && type === "cond" && condScore(pre) < 0.6 && r.deck.length >= 7){ r.gold += SKIP_GOLD; return; }   // 약한 조건은 덱이 무거우면 건너뜀
+  const pres = prefixOpts(r, type), sufs = suffixOptsFor(r, type, pres);
+  const pre = best(pres, id => type === "law" ? (usedSkills(r).includes(id) ? 2 : 0) + skillScore(id) : condScore(id));
+  const suf = best(sufs.filter(x => sentFits(type, pre, x)), id => type === "law" ? LAW_SCORE[id] : skillScore(id));
+  if (smart && type === "cond" && condScore(pre) < 0.6 && r.deck.length >= 7) return;   // 약한 조건은 덱이 무거우면 건너뜀
   r.deck.push(mkSent(r, type, pre, suf));
 }
 function botRun(seed, smart){
@@ -2234,24 +2247,27 @@ function onBattleEnd(){
   r.pickLeft = 1;
   renderReward(lines);
 }
-const SKIP_GOLD = 15;   // 보상 건너뛰기 골드
 function renderReward(lines){
   phase = "reward"; const r = runState;
-  if (!r.rw) r.rw = { type: rollSentType(r), pre: null, opts: null };
-  const w = r.rw; if (!w.opts) w.opts = w.pre ? suffixOpts(r, w.type, w.pre) : prefixOpts(r, w.type);
-  const typeName = w.type === "law" ? "📜 법칙형 (개체의 특징을 정해요)" : "⚙ 조건형 (언제 무엇을 할지)";
-  const head = w.pre ? `${w.type === "law" ? "법칙을 고르세요" : "실행할 스킬을 고르세요"} — <b>${preLabel(w.type, w.pre)}</b> ${w.type === "law" ? "=" : "→"} ?` : `${w.type === "law" ? "법칙을 적용할 개체(스킬)" : "조건"}을 고르세요`;
-  panel.innerHTML = `<div class="msg">${lines.join("<br>")}</div><div class="card"><b>보상 문장: ${typeName}</b><div class="small">${w.pre ? "2/2" : "1/2"} · ${head}</div></div>` +
-    w.opts.map((id, i) => { const full = w.pre ? (w.type === "law" ? `${SK_FULL(w.pre)} = ${LAWS[id].label}` : `${COND2[w.pre].label} → ${SK_FULL(id)}`) : "";
-      return `<button class="pick" data-i="${i}"><b>${w.pre ? sufLabel(w.type, id) : preLabel(w.type, id)}</b><span class="small">${w.pre ? "완성: " + full : w.type === "law" ? SKILL[id].desc : "이 조건 뒤에 스킬을 붙여요"}</span></button>`; }).join("") +
-    `<button class="mini" id="rskip" style="margin-top:6px;width:100%">건너뛰기 (문장 대신 💰${SKIP_GOLD})</button>`;
+  if (r.rw && !r.rw.pres) r.rw = null;   // 옛 저장 형식
+  if (!r.rw){ const type = rollSentType(r), pres = prefixOpts(r, type); r.rw = { type, pres, sufs: suffixOptsFor(r, type, pres), pre: null, suf: null }; }
+  const w = r.rw, law = w.type === "law";
+  const typeName = law ? "📜 법칙형 — [개체] = [특징]" : "⚙ 조건형 — [조건] → [스킬]";
+  const ok = w.pre != null && w.suf != null && sentFits(w.type, w.pre, w.suf);
+  const full = ok ? (law ? `${SK_FULL(w.pre)} = ${LAWS[w.suf].label}` : `${COND2[w.pre].label} → ${SK_FULL(w.suf)}`) : "";
+  const col = (title, list, side) => `<div class="rwcol"><div class="small" style="color:#ffe066">${title}</div>${list.map((id, i) => {
+    const sel = side === "L" ? w.pre === id : w.suf === id, bad = side === "R" && w.pre != null && !sentFits(w.type, w.pre, id);
+    const desc = side === "L" ? (law ? SKILL[id].desc : "") : (law ? (bad ? "이 개체엔 안 맞아요" : "") : SKILL[id].desc);
+    return `<button class="pick${sel ? " sel" : ""}" data-${side}="${i}" ${bad ? "disabled" : ""}><b>${side === "L" ? preLabel(w.type, id) : sufLabel(w.type, id)}</b>${desc ? `<span class="small">${desc}</span>` : ""}</button>`; }).join("")}</div>`;
+  panel.innerHTML = `<div class="msg" style="padding:5px 8px">${lines.join("<br>")}</div><div class="small"><b style="color:#fff;font-size:14px">보상 문장: ${typeName}</b> · 왼쪽과 오른쪽에서 하나씩 골라요</div>
+    <div class="rwgrid">${col(law ? "개체(스킬)" : "조건", w.pres, "L")}<div class="rwarrow">${law ? "=" : "→"}</div>${col(law ? "특징" : "실행할 스킬", w.sufs, "R")}</div>
+    <div class="row rwbar"><button class="main" id="rtake" ${ok ? "" : "disabled"} style="flex:2">${ok ? "받기: " + full : "양쪽에서 하나씩 고르세요"}</button><button class="mini" id="rskip" style="flex:1">건너뛰기</button></div>`;
   const done = () => { r.rw = null; if (r.encKind === "elite" || r.encKind === "boss") renderRelicGain(grantRelic(r, r.encKind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
-  panel.querySelectorAll(".pick").forEach(b => b.onclick = () => {
-    const id = w.opts[Number(b.dataset.i)];
-    if (!w.pre){ w.pre = id; w.opts = null; renderReward(lines); return; }
-    r.deck.push(mkSent(r, w.type, w.pre, id)); done();
-  });
-  document.getElementById("rskip").onclick = () => { r.gold += SKIP_GOLD; updateHud(); done(); };
+  const keep = () => { const y = panel.scrollTop; renderReward(lines); panel.scrollTop = y; };
+  panel.querySelectorAll(".pick[data-l]").forEach(b => b.onclick = () => { w.pre = w.pres[+b.dataset.l]; if (w.suf != null && !sentFits(w.type, w.pre, w.suf)) w.suf = null; keep(); });
+  panel.querySelectorAll(".pick[data-r]").forEach(b => b.onclick = () => { w.suf = w.sufs[+b.dataset.r]; keep(); });
+  document.getElementById("rtake").onclick = () => { if (!ok) return; r.deck.push(mkSent(r, w.type, w.pre, w.suf)); done(); };
+  document.getElementById("rskip").onclick = done;   // 건너뛰기: 아무것도 받지 않음
 }
 function renderRelicGain(id, next){
   phase = "relic"; updateHud();
