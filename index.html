@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 30</title>
+<title>볼배틀 탑 - 데모 31</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -77,6 +77,19 @@
   .zone.ok{border-color:#7fe36a;background:#2c4a2c}.zone.no{border-color:#e36a6a;background:#4a2c2c}.zone.hot{border-style:solid;box-shadow:0 0 0 3px #ffe066}
   .zchip,.pchip{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
   .gtag{margin-left:5px;padding:0 4px;border-radius:6px;background:rgba(255,224,102,.16);color:#ffe066;font-size:10.5px;white-space:nowrap}
+  .counter{display:flex;gap:12px;align-items:center;padding:8px 12px;border-radius:10px;font-size:15px}.counter .cnote{margin-left:auto;font-size:12px;color:#ffe066}
+  .shopc{background:linear-gradient(#5a3a1e,#3a2512);border:2px solid #a07a40}.forgec{background:linear-gradient(#3a2a2a,#221616);border:2px solid #c0602a;box-shadow:inset 0 -6px 14px rgba(255,110,30,.25)}
+  .shelf{display:flex;flex-direction:column;gap:5px}.shelfh{font-size:12px;color:#d8b880;border-bottom:2px solid #6a4a2a;padding-bottom:2px}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.tiles.big{grid-template-columns:repeat(3,1fr)}
+  .tile{border-radius:10px;padding:8px;text-align:center;color:#f0e6d8;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center}
+  .tile .ic{font-size:30px;line-height:1.1}.tiles.big .tile .ic{font-size:42px}.tile .nm{font-weight:bold;font-size:13px}.tile .sb{font-size:11px;color:#c8b8a0}.tile .pr{font-size:13px;color:#ffe066;font-weight:bold}
+  .tile.shop{background:linear-gradient(#4a3420,#2e2014);border:2px solid #8a6a3a}.tile.forge{background:linear-gradient(#3a3036,#1e1a1e);border:2px solid #7a5a4a}
+  .tile.forge:not(:disabled):active,.tile.shop:not(:disabled):active{transform:scale(.97)}.tile:disabled{opacity:.35}.tile.sold .pr{color:#aaa}
+  .decklist{display:flex;flex-direction:column;gap:5px;padding-left:26px}
+  .sentc{position:relative}
+  .tick{position:absolute;left:-27px;width:24px;border-top:1px solid #ffe066;font-size:9px;color:#ffe066;line-height:1;padding-top:1px;text-align:left;pointer-events:none}
+  .dh{display:inline-block;padding:0 7px 0 2px;margin-right:2px;cursor:grab;touch-action:none;color:#9ab;font-size:16px;user-select:none}
+  .sentc.drag{opacity:.5}.sentc.dropat{box-shadow:0 -3px 0 #ffe066}.dropend .decklist .sentc:last-child{box-shadow:0 3px 0 #ffe066}
   .sentc.ready{animation:rdy 1s ease-in-out infinite;border-color:#7fd8ff}
   @keyframes rdy{0%,100%{box-shadow:0 0 3px 1px rgba(120,210,255,.35)}50%{box-shadow:0 0 12px 4px rgba(120,210,255,.85)}}
   .sentc.scan{outline:2px solid #ffe066}.sentc.exec{outline:2px solid #7fe36a;background:#24412a}
@@ -141,7 +154,7 @@
 </head>
 <body>
 <div id="top"><span id="hud"></span>
-  <button id="bInfo" title="정보">📊</button><button id="bRelic" title="유물">🏺</button><button id="bPot" title="물약">🧪</button><button id="bAttr" title="속성·시너지·상성">🧬</button><button id="bDice" title="주사위">🎲</button><button id="bDev" class="dbg" title="개발 도구">🛠</button>
+  <button id="bDeck" title="덱">📜</button><button id="bInfo" title="정보">📊</button><button id="bRelic" title="유물">🏺</button><button id="bPot" title="물약">🧪</button><button id="bAttr" title="속성·시너지·상성">🧬</button><button id="bDice" title="주사위">🎲</button><button id="bDev" class="dbg" title="개발 도구">🛠</button>
   <button id="speed">1배속</button><button id="pause" disabled>⏸</button><button id="skip" disabled title="결과로 건너뛰기">⏭</button><button id="newRunBtn" title="새 게임 (두 번 탭)">🔄</button><button id="bFull" title="전체 화면">⛶</button>
 </div>
 <div id="main">
@@ -742,16 +755,20 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "30";   // 화면에 보이는 버전 (반영 확인용)
-const SCAN_T = 1.0, EXEC_T = 0.5;
+const VERSION = "31";   // 화면에 보이는 버전 (반영 확인용)
+const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
 function abText(ab){   // 전투 능력 → 문장 글 (적 문장 표시용)
   const t = ab.trig, when = t === "interval" ? `${ab.tp}초마다` : t === "hit" ? "상대와 닿을 때" : t === "damaged" ? "피해를 입을 때" : t === "wall" ? "벽에 닿을 때" : t === "start" ? "전투 시작 시" : t === "effect" ? `${SK_LABEL(ab.tp)}을(를) 쓸 때` : t;
   return `${when} → ${SK_FULL(ab.eff)}`;
 }
-const ENTITY = { bomb: { exec: 0.6 }, zone: { exec: 0.6 }, hex: { exec: 0.8 }, judgment: { exec: 0.6 }, nova: { exec: 0.5 },
-  brew: { exec: 0.3 }, drink: { exec: 0.3 }, atk: { exec: 0.3 }, accel: { exec: 0.3 }, shield: { exec: 0.4 }, heal: { exec: 0.4 }, heal5: { exec: 0.4 } };
+// 시전 시간(초): 문장이 실행되면 이만큼 기를 모은 뒤 스킬이 나감 (그동안 검사 멈춤)
+const ENTITY = { spin: { exec: 2.5 }, shoot: { exec: 2 }, bomb: { exec: 2.5 }, dash: { exec: 2 }, zone: { exec: 3 }, nova: { exec: 2.5 }, boomerang: { exec: 2.5 },
+  lightning: { exec: 3 }, poison: { exec: 2 }, missile: { exec: 2.5 }, fireball: { exec: 3 }, frostbolt: { exec: 2.5 }, freeze: { exec: 2.5 }, sonic: { exec: 2.5 },
+  watergun: { exec: 2.5 }, gust: { exec: 2 }, needle: { exec: 2 }, judgment: { exec: 3 }, hex: { exec: 3 },
+  shield: { exec: 2 }, heal: { exec: 2 }, heal5: { exec: 2 }, atk: { exec: 2 }, accel: { exec: 2 }, brew: { exec: 2 }, drink: { exec: 1.5 },
+  ritual: { exec: 1 }, quake: { exec: 1.5 }, charge: { exec: 1 } };
 const entExec = sk => (ENTITY[sk] && ENTITY[sk].exec) || EXEC_T;
 const SPEEDY = ["shoot", "missile", "fireball", "frostbolt", "watergun", "needle", "boomerang", "dash"];   // 속도 법칙이 의미 있는 개체
 // 조건형 앞자리(조건). rar: 클수록 흔함 → 좋은 조건일수록 작게
@@ -797,10 +814,16 @@ const mkSent = (r, type, pre, suf) => ({ uid: r.uid++, type, pre, suf, lv: 0 });
 const scanSlot = n => 0.5 + 2.5 / Math.max(1, n);
 const cycleTime = n => n * scanSlot(n);
 function scanAdvance(k){ const sc = k.scan; sc.i = (sc.i + 1) % k.abs.length; sc.t = Math.max(3, T(sc.slot)); }
-function execSent(s, k, ab){
-  k.scan.busy = Math.max(6, T(entExec(ab.eff) * (k.mod[ab.eff] ? k.mod[ab.eff].exec : 1)));   // 실행 시간 동안 검사가 멈춤
+function execSent(s, k, ab){   // 실행 = 시전 시작. 시전 시간이 끝나면 스킬이 나감 (그동안 검사 멈춤)
+  const t = Math.max(6, T(entExec(ab.eff) * (k.mod[ab.eff] ? k.mod[ab.eff].exec : 1)));
+  k.scan.busy = t; k.cast = { ab, t, max: t };
   ab.ready = false; ab.last = s.tick; ab.used = true; scanAdvance(k);
-  run(s, k, ab, ab.sent);
+}
+function lawExec(s, k, ab){   // 법칙: 전투마다 검사기가 처음 지나갈 때 적용
+  if (k.mod[ab.eff]) LAWS[ab.law].apply(k.mod[ab.eff], 1 + 0.5 * (ab.lv || 0));
+  ab.applied = true; ab.fired++; k.scan.busy = T(LAW_EXEC); scanAdvance(k);
+  if (k.id === 0) s.flash.push(ab.sent);
+  popS(s, k.x, k.y - k.R - 14, "📜" + SK_LABEL(ab.eff));
 }
 // 준비 상태: 조건이 한 번이라도 성립하면 그 문장은 '준비'됨 → 검사기가 그 문장에 오면 실행 (실행하면 준비 해제)
 function scanTick(s, k){
@@ -808,9 +831,10 @@ function scanTick(s, k){
   for (const ab of k.abs) if (ab.kind === "cond" && !ab.ready){
     if (ab.trig === "interval" ? s.tick - ab.last >= T(ab.tp) : ab.trig === "start" ? !ab.used : ab.trig === "metric" ? metricTrue(s, k, ab.tp) : false) ab.ready = true;
   }
-  if (sc.busy > 0){ sc.busy--; return; }
+  if (sc.busy > 0){ sc.busy--; if (k.cast && --k.cast.t <= 0){ const ab = k.cast.ab; k.cast = null; run(s, k, ab, ab.sent); } return; }
   const ab = k.abs[sc.i];
   if (ab.kind === "cond" && ab.ready){ execSent(s, k, ab); return; }
+  if (ab.kind === "law" && !ab.applied){ lawExec(s, k, ab); return; }
   if (--sc.t <= 0) scanAdvance(k);
 }
 function scanEvent(s, k, trig, ctx){   // 사건: 그 사건을 기다리는 문장을 모두 준비 상태로
@@ -828,7 +852,6 @@ function scanEvent(s, k, trig, ctx){   // 사건: 그 사건을 기다리는 문
 function newBall(id, x, y, ang, cfg){
   const fx = cfg.fx || {}, mod = {};
   for (const k in SKILL){ const u = (fx.up && fx.up[k]) || 0, fm = forgeMul(k, u); mod[k] = { pow: (fx.modPow || 1) * fm.pow, area: fm.area, cd: (fx.modCd || 1) * fm.cd }; mod[k].pow0 = mod[k].pow; mod[k].spd = 1; mod[k].exec = 1; /* pow0: 전투 시작 때 위력(강화는 이것의 25%씩 더함) */ }
-  if (cfg.scanMul != null && id === 0) for (const a of cfg.abilities) if (a.kind === "law" && mod[a.eff]) LAWS[a.law].apply(mod[a.eff], 1 + 0.5 * (a.lv || 0));   // 법칙형: 전투 내내 적용
   return { id, cfg, trait: cfg.trait || null, chargeT: 0, revT: 0, x, y, hx: Math.cos(ang), hy: Math.sin(ang), scan: cfg.scanMul != null ? (sl => ({ i: 0, t: Math.max(3, T(sl)), busy: 0, slot: sl, mul: cfg.scanMul }))(id === 0 ? scanSlot(cfg.abilities.length) * cfg.scanMul : SCAN_T * cfg.scanMul) : null, spd: cfg.spd != null ? cfg.spd : 3.5, R: cfg.R || R, name: cfg.name || "나", icon: cfg.icon || "", color: cfg.color || "#4aa3ff", ring: cfg.ring || "#fff", tag: cfg.tag || "me",
     maxHp: cfg.maxHp, hp: cfg.hp, atk: cfg.atk, def: cfg.def, atkBonus: 0, minI: cfg.minI, dashT: 0, dashMult: 1, dead: false, fx,
     hasteT: 0, hasteMult: 1, invulnT: 0, revived: false, spikes: cfg.spikes || 0, castMul: 1, lastCast: {}, wetT: 0, stagT: 0, stagHit: false, markT: 0, markAcc: 0, markSrc: null, curseT: 0,
@@ -1276,7 +1299,7 @@ const FORMATIONS = {
   trio:   { label: "3마리", n: 3, hp: 0.4,  atk: 0.7, def: 0.8, from: 5, w: 2 },
   swarm:  { label: "4마리", n: 4, hp: 0.3,  atk: 0.5, def: 0.5, from: 6, w: 1 }
 };
-let ENEMY_HP0 = 46, ENEMY_HP_GROW = 1.08, ENEMY_ATK0 = 7.5, ENEMY_ATK_GROW = 1.03;   // 적 곡선 (밸런스 조절용)
+let ENEMY_HP0 = 43, ENEMY_HP_GROW = 1.08, ENEMY_ATK0 = 6.8, ENEMY_ATK_GROW = 1.03;   // 적 곡선 (밸런스 조절용)
 const EARLY = { 1: 0.5, 2: 0.65, 3: 0.8 };   // 초반 층 적 체력 배율 (공격력은 제곱근)
 const SPIKES = 0.5;   // 가시 갑옷: 돌진에 맞으면 그 피해의 30%를 돌진한 쪽에 되돌림
 const mkAb = (trig, tp, eff) => ({ kind: "cond", trig, tp, eff, act: "cast" });   // 적 문장도 조건형 문장 (순차 검사)
@@ -1978,6 +2001,8 @@ function drawScene(c, st, preview){
   }
   for (const k of st.balls){
     if (k.dead){ if (k.revT > 0){ c.globalAlpha = 0.35; c.beginPath(); c.arc(k.x, k.y, k.R, 0, 6.29); c.fillStyle = k.color; c.fill(); c.globalAlpha = 1; c.fillStyle = "#ccd"; c.font = "bold 13px system-ui"; c.textAlign = "center"; c.fillText((k.revT / 60).toFixed(1), k.x, k.y + 5); } continue; }
+    if (k.cast){ const p = 1 - k.cast.t / k.cast.max; c.beginPath(); c.arc(k.x, k.y, k.R + 5, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = k.id === 0 ? "#ffe066" : "#ff8080"; c.lineWidth = 3; c.stroke();
+      c.fillStyle = k.id === 0 ? "#fff3b0" : "#ffc0c0"; c.font = "bold 10px system-ui"; c.textAlign = "center"; c.fillText(SK_LABEL(k.cast.ab.eff), k.x, k.y - k.R - 8); }
     if (k.chargeT > 0){ const p = 1 - k.chargeT / k.chargeMax; c.beginPath(); c.arc(k.x, k.y, k.R + 8, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#c08aff"; c.lineWidth = 4; c.stroke();
       c.fillStyle = "#e0c8ff"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText(`⏳${(k.chargeT / 60).toFixed(1)} ✋${fmt(Math.max(0, k.chargeNeed - k.chargeDmg))}`, k.x, k.y - k.R - 14); }
     if (k.trait === "doom" || k.trait === "fade"){ const left = (k.trait === "doom" ? DOOM_SEC : FADE_SEC) - st.tick / 60; c.fillStyle = "#ffb0b0"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText(`${k.trait === "doom" ? "🔔" : "👻"}${Math.max(0, left).toFixed(1)}`, k.x, k.y + k.R + 13); }
@@ -2066,6 +2091,7 @@ function openInfo(title, html, bind){   // 버튼으로 여는 정보 창
 }
 function closeInfo(){ const el = document.getElementById("info"); el.className = ""; el.innerHTML = ""; }
 function infoStats(){ const r = runState, fx = relicFx(r); return `<div class="card small">버전 ${VERSION}<br>🏢 ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 / ${TOP_FLOOR} · Lv${r.level} (경험치 ${r.xp}/${xpNeed(r.level)}) · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 검사 시간 ×${gapMulOf(r).toFixed(2)}<br>📜 문장 ${r.deck.length}개 · 한 바퀴 ${(cycleTime(r.deck.length) * gapMulOf(r)).toFixed(1)}초 (문장당 ${(scanSlot(r.deck.length) * gapMulOf(r)).toFixed(2)}초)</div>`; }
+document.getElementById("bDeck").onclick = openDeck;
 document.getElementById("bInfo").onclick = () => runState && openInfo("📊 정보", infoStats() + (runState.enc ? deckGlanceHtml(runState) + deckAttrHtml(runState) : ""));
 document.getElementById("bRelic").onclick = () => runState && openInfo("🏺 유물", relicHtml(runState));
 document.getElementById("bPot").onclick = () => runState && openInfo("🧪 물약", potionHtml(runState), el => el.querySelectorAll("button[data-dp]").forEach(b => b.onclick = () => { runState.potions.splice(Number(b.dataset.dp), 1); document.getElementById("bPot").onclick(); }));
@@ -2236,21 +2262,47 @@ function enemyCards(enc, live){   // 오른쪽: 적마다 이름·능력치·속
       ${e.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[e.trait]}</div>` : ""}<div class="small">${e.attrs && e.attrs.length ? `속성 ${attrIcons(e.attrs)} · 약점 ${attrIcons(e.weak) || "없음"}${e.resist.length ? ` · 저항 ${attrIcons(e.resist)}` : ""}` : "속성 없음"}${e.spikes ? " · 🦔가시 갑옷" : ""}</div>
       ${e.abilities.map((ab, i) => `<div class="card sentc" id="es${ei}_${i}" style="margin-top:3px;padding:4px 6px"><div class="desc" style="margin:0">${i + 1}. ${abText(ab)}</div></div>`).join("")}</div>`; }).join("");
 }
+// ===== 덱 목록 (준비 화면 왼쪽 · 📜 덱 창 공용) =====
+// 시간 눈금: 실행 없이 검사만 할 때 몇 초에 어느 문장을 지나는지 (문장당 scanSlot초)
+function deckListHtml(r, editable){
+  const n = r.deck.length, sl = scanSlot(n) * gapMulOf(r);
+  return r.deck.map((x, i) => {
+    let ticks = ""; for (let sec = Math.ceil(i * sl + 1e-6); sec < (i + 1) * sl - 1e-6; sec++){ if (sec === 0) continue; ticks += `<span class="tick" style="top:${((sec - i * sl) / sl * 100).toFixed(0)}%">${sec}초</span>`; }
+    return `<div class="card sentc" id="slot${i}" data-di="${i}">${ticks}<div class="lab"><span>${editable ? `<span class="dh" data-dh="${i}">≡</span>` : ""}${i + 1}. ${sentTag(x)}</span>${editable ? `<span><button class="mini" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button><button class="mini" data-dn="${i}" ${i === n - 1 ? "disabled" : ""}>▼</button></span>` : `<span class="cnt"></span>`}</div><div class="desc">${sentText(x)}</div></div>`; }).join("");
+}
+function bindDeckEdit(box, r, redraw){
+  const mv = (i, j) => { const D = r.deck; if (j < 0 || j >= D.length || i === j) return; const [x] = D.splice(i, 1); D.splice(j, 0, x); redraw(); };
+  box.querySelectorAll("button[data-up]").forEach(b => b.onclick = () => mv(+b.dataset.up, +b.dataset.up - 1));
+  box.querySelectorAll("button[data-dn]").forEach(b => b.onclick = () => mv(+b.dataset.dn, +b.dataset.dn + 1));
+  box.querySelectorAll(".dh").forEach(h => h.onpointerdown = e => {   // 끌어서 옮기기: ≡ 손잡이를 잡고 위아래로
+    e.preventDefault(); const from = +h.dataset.dh, card = h.closest(".sentc"); card.classList.add("drag"); let to = from;
+    const cards = [...box.querySelectorAll(".sentc[data-di]")];
+    const move = ev => { const y = ev.clientY; to = cards.length; for (let k = 0; k < cards.length; k++){ const rc = cards[k].getBoundingClientRect(); if (y < rc.top + rc.height / 2){ to = k; break; } }   // to = 이 카드 앞에 끼움
+      cards.forEach((c, k) => c.classList.toggle("dropat", k === to && to !== from && to !== from + 1)); box.classList.toggle("dropend", to === cards.length && from !== cards.length - 1); };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); card.classList.remove("drag"); cards.forEach(c => c.classList.remove("dropat")); box.classList.remove("dropend"); mv(from, to > from ? to - 1 : to); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  });
+}
+function openDeck(){   // 📜 덱 창: 언제든 확인, 전투 중이 아니면 순서 바꾸기
+  const r = runState; if (!r) return; const ed = phase !== "battle";
+  openInfo(`📜 덱 · ${r.deck.length}개 · 한 바퀴 ${(cycleTime(r.deck.length) * gapMulOf(r)).toFixed(1)}초`, `${ed ? "" : `<div class="small">전투 중에는 순서를 바꿀 수 없어요</div>`}<div class="decklist">${deckListHtml(r, ed)}</div>`,
+    el => { if (ed) bindDeckEdit(el, r, () => { saveGame(phase === "prep" ? "prep" : "route"); const y = el.querySelector(".vbody").scrollTop; openDeck(); document.querySelector("#info .vbody").scrollTop = y; if (phase === "prep") refreshPrepLeft(); }); });
+}
+function refreshPrepLeft(){ const y = leftBody().parentElement.scrollTop; prepKeepInfo = true; renderPrep(); prepKeepInfo = false; leftBody().parentElement.scrollTop = y; }
+let prepKeepInfo = false;
 function renderPrep(){
   phase = "prep"; skipBtn.disabled = true; pauseBtn.disabled = true; renderPotions(); saveGame("prep");
   const r = runState; ensureBoss(r);
   state = null; if (!pv || pvEnc !== r.enc) startPreview();   // 가운데 화면에 다음 상대 미리보기
   const e = r.enc, title = r.encKind === "boss" ? "👑 보스" : r.encKind === "elite" ? "👹 정예" : (e.length > 1 ? `적 ${e.length}마리` : "적");
-  updateHud(); closeInfo();
+  updateHud(); if (!prepKeepInfo) closeInfo();
   const note = prepNote ? `<div class="note">${prepNote}</div>` : ""; prepNote = "";
   const cyc = cycleTime(r.deck.length) * gapMulOf(r), b = deckBrief(r);
   leftBody().innerHTML = `<div class="sideh">📜 내 덱 · 문장 ${r.deck.length}개 · 한 바퀴 ${cyc.toFixed(1)}초~ ${verdictTag(b.verdict)}</div>${note}
-    ${r.deck.map((x, i) => `<div class="card sentc" id="slot${i}"><div class="lab"><span>${i + 1}. ${sentTag(x)}</span><span><button class="mini" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button><button class="mini" data-dn="${i}" ${i === r.deck.length - 1 ? "disabled" : ""}>▼</button></span></div><div class="desc">${sentText(x)}</div></div>`).join("")}
+    <div class="decklist">${deckListHtml(r, true)}</div>
     <button class="main" id="go">⚔ 전투 시작</button>`;
   rightEl().innerHTML = `<div class="sideh">${actOf(r.floor)}막 ${r.floor}층 · ${title}</div>${enemyCards(e)}`;
-  const mv = (i, d) => { const D = r.deck, j = i + d; if (j < 0 || j >= D.length) return; [D[i], D[j]] = [D[j], D[i]]; const y = leftBody().parentElement.scrollTop; renderPrep(); leftBody().parentElement.scrollTop = y; };
-  document.querySelectorAll("#leftBody button[data-up]").forEach(b => b.onclick = () => mv(Number(b.dataset.up), -1));
-  document.querySelectorAll("#leftBody button[data-dn]").forEach(b => b.onclick = () => mv(Number(b.dataset.dn), 1));
+  bindDeckEdit(leftBody(), r, refreshPrepLeft);
   document.getElementById("go").onclick = startBattle;
 }
 // ===== 블록 배치: 길게 눌러 끌기 / 탭으로 고르고 칸 탭 =====
@@ -2365,7 +2417,7 @@ function startBattle(){
   const r = runState;
   pv = null; state = startFight(r); phase = "battle"; ended = false; acc = 0; last = performance.now(); skipBtn.disabled = false;
   paused = false; pauseBtn.disabled = false; pauseBtn.textContent = "⏸"; renderPotions();
-  leftBody().innerHTML = `<div class="sideh">📜 내 문장</div>` + r.deck.map((x, i) => `<div class="card sentc" id="slot${i}"><div class="lab"><span>${i + 1}. ${sentTag(x)}</span><span class="cnt"></span></div><div class="desc">${sentText(x)}</div></div>`).join("");
+  leftBody().innerHTML = `<div class="sideh">📜 내 문장</div><div class="decklist">${deckListHtml(r, false)}</div>`;
   rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(state.balls.slice(1).map(k => k.cfg), state);
 }
 function updateBattleUi(){
@@ -2374,7 +2426,7 @@ function updateBattleUi(){
     k.abs.forEach((ab, i) => { const card = document.getElementById(idOf(i)); if (!card) return;
       const cur = !k.dead && i === sc.i && sc.busy <= 0, run = !k.dead && sc.busy > 0 && i === (sc.i - 1 + n) % n;
       card.classList.toggle("scan", cur); card.classList.toggle("exec", run); card.classList.toggle("ready", !k.dead && !!ab.ready && !run);
-      const el = card.querySelector(".cnt"); if (el) el.textContent = ab.kind === "law" ? "법칙" : `실행 ${ab.fired}회${k.frozenT > 0 ? " · 🧊" : ""}`; }); };
+      const el = card.querySelector(".cnt"); if (el) el.textContent = ab.kind === "law" ? (ab.applied ? "적용됨" : "적용 전") : `실행 ${ab.fired}회${k.frozenT > 0 ? " · 🧊" : ""}`; }); };
   if (document.querySelectorAll("#right .ecard").length !== state.balls.length - 1) rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(state.balls.slice(1).map(k => k.cfg), state);   // 분열 등으로 적 수가 바뀌면 다시 그림
   mark(state.balls[0], i => "slot" + i);
   state.balls.slice(1).forEach((k, ei) => { mark(k, i => `es${ei}_${i}`); const c = document.getElementById("en" + ei); if (c){ c.style.opacity = k.dead ? 0.35 : 1; const hp = c.querySelector(".lab span"); if (hp) hp.textContent = `❤${fmt(Math.max(0, k.hp))}/${fmt(k.maxHp)} ⚔${fmt(k.atk)} 🛡${k.def}`; } });
@@ -2489,15 +2541,19 @@ function renderRest(wasHidden){
 }
 function itemName(it){ return it.type === "sent" ? `${sentText(it.sent)}` : it.type === "remove" ? "✂ 문장 하나 지우기" : it.type === "block" ? `${it.ids.map(id => `${bname(id)}${tierOfBlock(id) ? tierTag(tierOfBlock(id)) : ""}`).join(" + ")} <span class="small">(${it.ids.length > 1 ? "세트" : KIND_LABEL[BLK[it.ids[0]].k]})</span>` : it.type === "relic" ? `${RELIC[it.id].icon} ${RELIC[it.id].name}${tierTag(RELIC[it.id].tier)}` : `${POTION[it.id].icon} ${POTION[it.id].name}${tierTag(POTION[it.id].tier)}`; }
 function itemDesc(it){ return it.type === "sent" ? "" : it.type === "remove" ? "" : it.type === "block" ? offerDesc(it.ids) : it.type === "relic" ? RELIC[it.id].desc : POTION[it.id].desc; }
-function renderShop(wasHidden, note){
+function renderShop(wasHidden, note){   // 상점: 진열대에서 고르기
   phase = "shop"; const r = runState; updateHud();
-  const lab = { block: "🧱 블록", sent: "📜 문장", remove: "✂ 지우기", relic: "🏺 유물", potion: "🧪 물약" };
   r.shop.forEach(it => { if (it.type === "remove" && !it.sold) it.price = removeCost(r); });
-  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🛒 상점 · 💰${r.gold}${note ? `<br><b>${note}</b>` : ""}</div>` +
-    r.shop.map((it, i) => `<button class="pick" data-i="${i}" ${it.sold ? "disabled" : ""}><span class="tag d">${lab[it.type]}</span><b>${itemName(it)}</b>${itemDesc(it) ? `<span class="small">${itemDesc(it)}</span>` : ""}<span class="small" style="color:#ffe066">${it.sold ? "판매 완료" : "💰 " + it.price}</span></button>`).join("") +
+  const tile = (it, i) => { const icon = it.type === "sent" ? "📜" : it.type === "remove" ? "✂" : it.type === "relic" ? RELIC[it.id].icon : it.type === "potion" ? POTION[it.id].icon : "🧱";
+    const name = it.type === "sent" ? sentText(it.sent) : it.type === "remove" ? "문장 지우기" : it.type === "relic" ? `${RELIC[it.id].name}${tierTag(RELIC[it.id].tier)}` : it.type === "potion" ? `${POTION[it.id].name}${tierTag(POTION[it.id].tier)}` : itemName(it);
+    const sub = it.type === "relic" ? RELIC[it.id].desc : it.type === "potion" ? POTION[it.id].desc : it.type === "sent" ? (it.sent.type === "law" ? "법칙" : "조건") : "";
+    return `<button class="tile shop${it.sold ? " sold" : ""}" data-i="${i}" ${it.sold ? "disabled" : ""}><div class="ic">${icon}</div><div class="nm">${name}</div>${sub ? `<div class="sb">${sub}</div>` : ""}<div class="pr">${it.sold ? "판매 완료" : "💰 " + it.price}</div></button>`; };
+  const sec = (title, f) => { const L = r.shop.map((it, i) => [it, i]).filter(([it]) => f(it)); return L.length ? `<div class="shelf"><div class="shelfh">${title}</div><div class="tiles">${L.map(([it, i]) => tile(it, i)).join("")}</div></div>` : ""; };
+  panel.innerHTML = `<div class="counter shopc"><b>🛒 상점</b><span>💰 ${r.gold}</span>${note ? `<span class="cnote">${note}</span>` : ""}</div>` +
+    sec("📜 문장", it => it.type === "sent") + sec("🏺 유물 · 🧪 물약", it => it.type === "relic" || it.type === "potion" || it.type === "block") + sec("✂ 서비스", it => it.type === "remove") +
     `<button class="main" id="lv">나가기</button>`;
-  panel.querySelectorAll(".pick").forEach(b => b.onclick = () => { const it = r.shop[Number(b.dataset.i)];
-    if (it.type === "remove"){ if (r.gold < it.price) return renderShop(wasHidden, "골드가 부족해요"); return renderPickSent("✂ 지우기 (💰" + it.price + ")", i => { const e = removeSent(r, i); if (!e){ r.gold -= it.price; it.sold = true; } renderShop(wasHidden, e || "문장을 지웠어요"); }, () => renderShop(wasHidden)); }
+  panel.querySelectorAll(".tile[data-i]").forEach(b => b.onclick = () => { const it = r.shop[Number(b.dataset.i)];
+    if (it.type === "remove"){ if (r.gold < it.price) return renderShop(wasHidden, "골드가 부족해요"); return renderPickSent("✂ 지우기 (💰" + it.price + ")", i => { const e = removeSent(r, i); if (!e){ r.gold -= it.price; it.sold = true; } renderShop(wasHidden, e || "지웠어요"); }, () => renderShop(wasHidden)); }
     const e = buyItem(r, it); renderShop(wasHidden, e || ""); });
   document.getElementById("lv").onclick = () => finishRest("상점을 나왔어요");
 }
@@ -2510,20 +2566,31 @@ function renderPickSent(title, onPick, onBack, filter){
 }
 function upSent(r, i){ const x = r.deck[i]; if (!x || (x.lv || 0) >= SENT_MAX_LV) return "이미 최대 단계예요"; const c = sentUpCost(x.lv || 0); if (r.gold < c) return "골드가 부족해요"; r.gold -= c; x.lv = (x.lv || 0) + 1; return null; }
 const sentUpText = x => x.type === "law" ? "법칙 효과 +50%" : "그 문장의 위력 +30%";
-function renderForge(wasHidden, note){
+function renderForge(wasHidden, note, view){   // 대장간: 모루·숫돌·화로 중 하나를 골라 들어감 (각 화면에 뒤로)
   phase = "forge"; const r = runState; updateHud();
-  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🔨 대장간 · 💰${r.gold}${note ? `<br><b>${note}</b>` : ""}</div>` +
-    r.deck.map((x, i) => { const lv = x.lv || 0, max = lv >= SENT_MAX_LV;
-      return `<button class="pick" data-su="${i}" ${max ? "disabled" : ""}>${sentTag(x)}<b>${i + 1}. ${sentText(x)}</b><span class="small">${max ? "최대" : `★${lv + 1}: ${sentUpText(x)}`}</span><span class="small" style="color:#ffe066">${max ? "" : "💰 " + sentUpCost(lv)}</span></button>`; }).join("") +
-    `<button class="pick" id="fremove"><b>✂ 문장 지우기</b><span class="small" style="color:#ffe066">💰 ${removeCost(r)}</span></button>` +
-    `<div class="msg" style="background:#232a4a;border-color:#4a5290">🧬 속성 단련</div>` +
-    UP_ATTRS.map(a => { const lv = r.attrUp[a] || 0, max = lv >= ATTR_UP_MAX;
-      return `<button class="pick" data-au="${a}" ${max ? "disabled" : ""}><b>${ATTR[a].icon} ${ATTR[a].name} · ${lv}단계</b><span class="small">${lv ? ATTR_UP_TEXT[a](lv) : "-"}${max ? " (최대)" : ` → ${ATTR_UP_TEXT[a](lv + 1)}`}</span><span class="small" style="color:#ffe066">${max ? "" : "💰 " + attrUpCost(lv)}</span></button>`; }).join("") +
-    `<button class="main" id="lv">나가기</button>`;
-  panel.querySelectorAll(".pick[data-su]").forEach(b => b.onclick = () => { const e = upSent(r, Number(b.dataset.su)); renderForge(wasHidden, e || "문장 강화!"); });
-  document.getElementById("fremove").onclick = () => { if (r.gold < removeCost(r)) return renderForge(wasHidden, "골드가 부족해요"); renderPickSent(`✂ 지우기 (💰${removeCost(r)})`, i => { const c = removeCost(r), e = removeSent(r, i); if (!e) r.gold -= c; renderForge(wasHidden, e || "문장을 지웠어요"); }, () => renderForge(wasHidden)); };
-  panel.querySelectorAll(".pick[data-au]").forEach(b => b.onclick = () => { const e = forgeAttrUp(r, b.dataset.au); renderForge(wasHidden, e || `${ATTR[b.dataset.au].name} 규칙 단련!`); });
-  document.getElementById("lv").onclick = () => finishRest("대장간을 나왔어요");
+  const head = `<div class="counter forgec"><b>🔨 대장간</b><span>💰 ${r.gold}</span>${note ? `<span class="cnote">${note}</span>` : ""}</div>`;
+  const back = `<button class="main" id="fback">뒤로</button>`, my = [...deckAttrSet(r)].filter(a => UP_ATTRS.includes(a));
+  if (view === "up"){
+    panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔨 모루 — 강화할 문장</div><div class="tiles">${r.deck.map((x, i) => { const lv = x.lv || 0, max = lv >= SENT_MAX_LV;
+      return `<button class="tile forge" data-su="${i}" ${max ? "disabled" : ""}><div class="nm">${i + 1}. ${sentText(x)}</div><div class="sb">${max ? "최대" : `★${lv + 1}: ${sentUpText(x)}`}</div><div class="pr">${max ? "" : "💰 " + sentUpCost(lv)}</div></button>`; }).join("")}</div></div>` + back;
+    panel.querySelectorAll(".tile[data-su]").forEach(b => b.onclick = () => { const e = upSent(r, Number(b.dataset.su)); renderForge(wasHidden, e || "강화!", "up"); });
+  } else if (view === "attr"){
+    panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔥 화로 — 속성 단련 (내 스킬의 속성만)</div>${my.length ? `<div class="tiles">${my.map(a => { const lv = r.attrUp[a] || 0, max = lv >= ATTR_UP_MAX;
+      return `<button class="tile forge" data-au="${a}" ${max ? "disabled" : ""}><div class="ic">${ATTR[a].icon}</div><div class="nm">${ATTR[a].name} ${lv}단계</div><div class="sb">${max ? "최대" : ATTR_UP_TEXT[a](lv + 1)}</div><div class="pr">${max ? "" : "💰 " + attrUpCost(lv)}</div></button>`; }).join("")}</div>` : `<div class="small">단련할 속성이 없어요</div>`}</div>` + back;
+    panel.querySelectorAll(".tile[data-au]").forEach(b => b.onclick = () => { const e = forgeAttrUp(r, b.dataset.au); renderForge(wasHidden, e || `${ATTR[b.dataset.au].name} 단련!`, "attr"); });
+  } else {
+    panel.innerHTML = head + `<div class="tiles big">
+      <button class="tile forge" id="fUp"><div class="ic">⚒️</div><div class="nm">모루</div><div class="sb">문장 강화 (★${SENT_MAX_LV}까지)</div></button>
+      <button class="tile forge" id="fRm"><div class="ic">✂️</div><div class="nm">숫돌</div><div class="sb">문장 지우기</div><div class="pr">💰 ${removeCost(r)}</div></button>
+      <button class="tile forge" id="fAt" ${my.length ? "" : "disabled"}><div class="ic">🔥</div><div class="nm">화로</div><div class="sb">속성 단련 ${my.map(a => ATTR[a].icon).join("")}</div></button></div>
+      <button class="main" id="lv">나가기</button>`;
+    document.getElementById("fUp").onclick = () => renderForge(wasHidden, "", "up");
+    document.getElementById("fAt").onclick = () => renderForge(wasHidden, "", "attr");
+    document.getElementById("fRm").onclick = () => { if (r.gold < removeCost(r)) return renderForge(wasHidden, "골드가 부족해요"); renderPickSent(`✂ 지우기 (💰${removeCost(r)})`, i => { const c = removeCost(r), e = removeSent(r, i); if (!e) r.gold -= c; renderForge(wasHidden, e || "지웠어요"); }, () => renderForge(wasHidden)); };
+    document.getElementById("lv").onclick = () => finishRest("대장간을 나왔어요");
+    return;
+  }
+  document.getElementById("fback").onclick = () => renderForge(wasHidden);
 }
 
 function renderFacePick(n){
