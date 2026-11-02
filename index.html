@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 29.7</title>
+<title>볼배틀 탑 - 데모 29.8</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -77,6 +77,8 @@
   .zone.ok{border-color:#7fe36a;background:#2c4a2c}.zone.no{border-color:#e36a6a;background:#4a2c2c}.zone.hot{border-style:solid;box-shadow:0 0 0 3px #ffe066}
   .zchip,.pchip{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:grab}
   .gtag{margin-left:5px;padding:0 4px;border-radius:6px;background:rgba(255,224,102,.16);color:#ffe066;font-size:10.5px;white-space:nowrap}
+  .sentc.ready{animation:rdy 1s ease-in-out infinite;border-color:#7fd8ff}
+  @keyframes rdy{0%,100%{box-shadow:0 0 3px 1px rgba(120,210,255,.35)}50%{box-shadow:0 0 12px 4px rgba(120,210,255,.85)}}
   .sentc.scan{outline:2px solid #ffe066}.sentc.exec{outline:2px solid #7fe36a;background:#24412a}
   .pchip{padding:6px 10px}.pchip.sel{outline:2px solid #ffe066;background:#4a5aa8}
   .chip.dim{opacity:.55}
@@ -172,7 +174,7 @@ const isBossFloor = f => relF(f) === ACT_LEN;
 const STRETCH = 1.5;
 const effFloor = f => 1 + (relF(f) - 1) * (9 / (ACT_LEN - 1)) * STRETCH;   // 막 안의 난이도 곡선 (막마다 처음부터)
 const absFloor = f => effFloor(f) + (actOf(f) - 1) * (1 + 9 * STRETCH);    // 전체 진행도 (골드 보상 등)
-const ACT_HP = 2.5, ACT_ATK = 1.6;   // 막이 올라갈 때마다 적 체력·공격력 배율 (밸런스용)
+let ACT_HP = 3, ACT_ATK = 1.8;   // 막이 올라갈 때마다 적 체력·공격력 배율 (밸런스용)
 const actMul = (f, m) => Math.pow(m, actOf(f) - 1);
 const POST_FIGHT_HEAL = 0;   // 전투 후 회복 없음 (사용자 결정, 유물 회복만)
 const FACE_UP = { hp: 3, atk: 1, def: 1, gap: 0.01 };
@@ -734,7 +736,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "29.7";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "29.8";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 0.5;
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -778,38 +780,43 @@ function sentAb(x, i){   // 문장 → 전투 능력
   const c = COND2[x.pre]; return { kind: "cond", trig: c.trig, tp: c.tp, eff: x.suf, act: "cast", lvMul: 1 + 0.3 * (x.lv || 0), sent: i, last: 0 };
 }
 const mkSent = (r, type, pre, suf) => ({ uid: r.uid++, type, pre, suf, lv: 0 });
-function scanAdvance(k){ const sc = k.scan; sc.i = (sc.i + 1) % k.abs.length; sc.t = Math.max(6, T(SCAN_T * sc.mul)); }
+// 문장 하나당 검사 시간: 덱 5개면 한 바퀴 5초, 문장이 하나 늘 때마다 한 바퀴 +0.5초 → 문장당 0.5 + 2.5/n초 (0.5초에 수렴)
+const scanSlot = n => 0.5 + 2.5 / Math.max(1, n);
+const cycleTime = n => n * scanSlot(n);
+function scanAdvance(k){ const sc = k.scan; sc.i = (sc.i + 1) % k.abs.length; sc.t = Math.max(3, T(sc.slot)); }
 function execSent(s, k, ab){
   k.scan.busy = Math.max(6, T(entExec(ab.eff) * (k.mod[ab.eff] ? k.mod[ab.eff].exec : 1)));   // 실행 시간 동안 검사가 멈춤
-  ab.last = s.tick; ab.used = true; scanAdvance(k);
+  ab.ready = false; ab.last = s.tick; ab.used = true; scanAdvance(k);
   run(s, k, ab, ab.sent);
 }
+// 준비 상태: 조건이 한 번이라도 성립하면 그 문장은 '준비'됨 → 검사기가 그 문장에 오면 실행 (실행하면 준비 해제)
 function scanTick(s, k){
   const sc = k.scan; if (!k.abs.length) return;
-  if (sc.busy > 0){ if (--sc.busy === 0 && sc.pend.length){ const P = sc.pend; sc.pend = []; for (const e of P){ if (sc.busy > 0) break; scanEvent(s, k, e.trig, e.ctx); } } return; }   // 실행이 끝나면, 실행 중에 생긴 사건을 다음 문장에 한 번 대 봄
-  const ab = k.abs[sc.i];
-  if (ab.kind === "cond"){
-    const ok = ab.trig === "interval" ? s.tick - ab.last >= T(ab.tp) : ab.trig === "start" ? !ab.used : ab.trig === "metric" ? metricTrue(s, k, ab.tp) : false;
-    if (ok){ execSent(s, k, ab); return; }
+  for (const ab of k.abs) if (ab.kind === "cond" && !ab.ready){
+    if (ab.trig === "interval" ? s.tick - ab.last >= T(ab.tp) : ab.trig === "start" ? !ab.used : ab.trig === "metric" ? metricTrue(s, k, ab.tp) : false) ab.ready = true;
   }
+  if (sc.busy > 0){ sc.busy--; return; }
+  const ab = k.abs[sc.i];
+  if (ab.kind === "cond" && ab.ready){ execSent(s, k, ab); return; }
   if (--sc.t <= 0) scanAdvance(k);
 }
-function scanEvent(s, k, trig, ctx){   // 사건: 지금 검사 중인 문장이 그 사건을 기다리고 있으면 실행
-  const sc = k.scan; if (!sc || !k.abs.length) return;
-  if (sc.busy > 0){ if (sc.pend.length < 8) sc.pend.push({ trig, ctx }); return; }   // 실행 중에 생긴 사건은 기억해 둠
-  const ab = k.abs[sc.i]; if (!ab || ab.kind !== "cond" || ab.trig !== trig) return;
-  if (trig === "effect" && ab.tp !== ctx.effect) return;
-  if ((trig === "attrhit" || trig === "attrcast") && ab.tp !== ctx.attr) return;
-  if (trig === "skillhit" && ab.tp !== ctx.sk) return;
-  if ((trig === "stapply" || trig === "stend") && ab.tp !== ctx.st) return;
-  if (trig === "reaction" && ab.tp !== "any" && ab.tp !== ctx.name) return;
-  execSent(s, k, ab);
+function scanEvent(s, k, trig, ctx){   // 사건: 그 사건을 기다리는 문장을 모두 준비 상태로
+  if (!k.scan || !k.abs.length) return;
+  for (const ab of k.abs){
+    if (ab.kind !== "cond" || ab.ready || ab.trig !== trig) continue;
+    if (trig === "effect" && ab.tp !== ctx.effect) continue;
+    if ((trig === "attrhit" || trig === "attrcast") && ab.tp !== ctx.attr) continue;
+    if (trig === "skillhit" && ab.tp !== ctx.sk) continue;
+    if ((trig === "stapply" || trig === "stend") && ab.tp !== ctx.st) continue;
+    if (trig === "reaction" && ab.tp !== "any" && ab.tp !== ctx.name) continue;
+    ab.ready = true;
+  }
 }
 function newBall(id, x, y, ang, cfg){
   const fx = cfg.fx || {}, mod = {};
   for (const k in SKILL){ const u = (fx.up && fx.up[k]) || 0, fm = forgeMul(k, u); mod[k] = { pow: (fx.modPow || 1) * fm.pow, area: fm.area, cd: (fx.modCd || 1) * fm.cd }; mod[k].pow0 = mod[k].pow; mod[k].spd = 1; mod[k].exec = 1; /* pow0: 전투 시작 때 위력(강화는 이것의 25%씩 더함) */ }
   if (cfg.scanMul != null && id === 0) for (const a of cfg.abilities) if (a.kind === "law" && mod[a.eff]) LAWS[a.law].apply(mod[a.eff], 1 + 0.5 * (a.lv || 0));   // 법칙형: 전투 내내 적용
-  return { id, x, y, hx: Math.cos(ang), hy: Math.sin(ang), scan: cfg.scanMul != null ? { i: 0, t: Math.max(6, T(SCAN_T * cfg.scanMul)), busy: 0, pend: [], mul: cfg.scanMul } : null, spd: cfg.spd != null ? cfg.spd : 3.5, R: cfg.R || R, name: cfg.name || "나", icon: cfg.icon || "", color: cfg.color || "#4aa3ff", ring: cfg.ring || "#fff", tag: cfg.tag || "me",
+  return { id, x, y, hx: Math.cos(ang), hy: Math.sin(ang), scan: cfg.scanMul != null ? (sl => ({ i: 0, t: Math.max(3, T(sl)), busy: 0, slot: sl, mul: cfg.scanMul }))(id === 0 ? scanSlot(cfg.abilities.length) * cfg.scanMul : SCAN_T * cfg.scanMul) : null, spd: cfg.spd != null ? cfg.spd : 3.5, R: cfg.R || R, name: cfg.name || "나", icon: cfg.icon || "", color: cfg.color || "#4aa3ff", ring: cfg.ring || "#fff", tag: cfg.tag || "me",
     maxHp: cfg.maxHp, hp: cfg.hp, atk: cfg.atk, def: cfg.def, atkBonus: 0, minI: cfg.minI, dashT: 0, dashMult: 1, dead: false, fx,
     hasteT: 0, hasteMult: 1, invulnT: 0, revived: false, spikes: cfg.spikes || 0, castMul: 1, lastCast: {}, wetT: 0, stagT: 0, stagHit: false, markT: 0, markAcc: 0, markSrc: null, curseT: 0,
     slowT: 0, slowMult: 1, shieldHp: 0, shieldT: 0, dots: [], mod, weak: cfg.weak || [], resist: cfg.resist || [],
@@ -1225,7 +1232,7 @@ const FORMATIONS = {
   trio:   { label: "3마리", n: 3, hp: 0.4,  atk: 0.7, def: 0.8, from: 5, w: 2 },
   swarm:  { label: "4마리", n: 4, hp: 0.3,  atk: 0.5, def: 0.5, from: 6, w: 1 }
 };
-let ENEMY_HP0 = 45, ENEMY_HP_GROW = 1.08, ENEMY_ATK0 = 7, ENEMY_ATK_GROW = 1.03;   // 적 곡선 (밸런스 조절용)
+let ENEMY_HP0 = 50, ENEMY_HP_GROW = 1.08, ENEMY_ATK0 = 8, ENEMY_ATK_GROW = 1.03;   // 적 곡선 (밸런스 조절용)
 const EARLY = { 1: 0.5, 2: 0.65, 3: 0.8 };   // 초반 층 적 체력 배율 (공격력은 제곱근)
 const SPIKES = 0.5;   // 가시 갑옷: 돌진에 맞으면 그 피해의 30%를 돌진한 쪽에 되돌림
 const mkAb = (trig, tp, eff) => ({ kind: "cond", trig, tp, eff, act: "cast" });   // 적 문장도 조건형 문장 (순차 검사)
@@ -2009,7 +2016,7 @@ function openInfo(title, html, bind){   // 버튼으로 여는 정보 창
   if (bind) bind(el);
 }
 function closeInfo(){ const el = document.getElementById("info"); el.className = ""; el.innerHTML = ""; }
-function infoStats(){ const r = runState, fx = relicFx(r); return `<div class="card small">버전 ${VERSION}<br>🏢 ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 / ${TOP_FLOOR} · Lv${r.level} (경험치 ${r.xp}/${xpNeed(r.level)}) · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 검사 시간 ×${gapMulOf(r).toFixed(2)}<br>📜 문장 ${r.deck.length}개 · 한 바퀴 최소 ${(r.deck.length * SCAN_T * gapMulOf(r)).toFixed(1)}초</div>`; }
+function infoStats(){ const r = runState, fx = relicFx(r); return `<div class="card small">버전 ${VERSION}<br>🏢 ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 / ${TOP_FLOOR} · Lv${r.level} (경험치 ${r.xp}/${xpNeed(r.level)}) · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 검사 시간 ×${gapMulOf(r).toFixed(2)}<br>📜 문장 ${r.deck.length}개 · 한 바퀴 ${(cycleTime(r.deck.length) * gapMulOf(r)).toFixed(1)}초 (문장당 ${(scanSlot(r.deck.length) * gapMulOf(r)).toFixed(2)}초)</div>`; }
 document.getElementById("bInfo").onclick = () => runState && openInfo("📊 정보", infoStats() + (runState.enc ? deckGlanceHtml(runState) + deckAttrHtml(runState) : ""));
 document.getElementById("bRelic").onclick = () => runState && openInfo("🏺 유물", relicHtml(runState));
 document.getElementById("bPot").onclick = () => runState && openInfo("🧪 물약", potionHtml(runState), el => el.querySelectorAll("button[data-dp]").forEach(b => b.onclick = () => { runState.potions.splice(Number(b.dataset.dp), 1); document.getElementById("bPot").onclick(); }));
@@ -2187,7 +2194,7 @@ function renderPrep(){
   const e = r.enc, title = r.encKind === "boss" ? "👑 보스" : r.encKind === "elite" ? "👹 정예" : (e.length > 1 ? `적 ${e.length}마리` : "적");
   updateHud(); closeInfo();
   const note = prepNote ? `<div class="note">${prepNote}</div>` : ""; prepNote = "";
-  const cyc = r.deck.length * SCAN_T * gapMulOf(r), b = deckBrief(r);
+  const cyc = cycleTime(r.deck.length) * gapMulOf(r), b = deckBrief(r);
   leftBody().innerHTML = `<div class="sideh">📜 내 덱 · 문장 ${r.deck.length}개 · 한 바퀴 ${cyc.toFixed(1)}초~ ${verdictTag(b.verdict)}</div>${note}
     ${r.deck.map((x, i) => `<div class="card sentc" id="slot${i}"><div class="lab"><span>${i + 1}. ${sentTag(x)}</span><span><button class="mini" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button><button class="mini" data-dn="${i}" ${i === r.deck.length - 1 ? "disabled" : ""}>▼</button></span></div><div class="desc">${sentText(x)}</div></div>`).join("")}
     <button class="main" id="go">⚔ 전투 시작</button>`;
@@ -2317,7 +2324,7 @@ function updateBattleUi(){
   const mark = (k, idOf) => { const sc = k.scan; if (!sc) return; const n = k.abs.length;
     k.abs.forEach((ab, i) => { const card = document.getElementById(idOf(i)); if (!card) return;
       const cur = !k.dead && i === sc.i && sc.busy <= 0, run = !k.dead && sc.busy > 0 && i === (sc.i - 1 + n) % n;
-      card.classList.toggle("scan", cur); card.classList.toggle("exec", run);
+      card.classList.toggle("scan", cur); card.classList.toggle("exec", run); card.classList.toggle("ready", !k.dead && !!ab.ready && !run);
       const el = card.querySelector(".cnt"); if (el) el.textContent = ab.kind === "law" ? "법칙" : `실행 ${ab.fired}회${k.frozenT > 0 ? " · 🧊" : ""}`; }); };
   mark(state.balls[0], i => "slot" + i);
   state.balls.slice(1).forEach((k, ei) => { mark(k, i => `es${ei}_${i}`); const c = document.getElementById("en" + ei); if (c){ c.style.opacity = k.dead ? 0.35 : 1; const hp = c.querySelector(".lab span"); if (hp) hp.textContent = `❤${fmt(Math.max(0, k.hp))}/${fmt(k.maxHp)} ⚔${fmt(k.atk)} 🛡${k.def}`; } });
