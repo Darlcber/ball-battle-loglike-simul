@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 29.4</title>
+<title>볼배틀 탑 - 데모 29.5</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -32,7 +32,7 @@
   #panel.on{display:flex}
   #info{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.6);display:none}
   #info.on{display:block}
-  #info .vsheet{max-width:640px}
+  #info .vsheet{max-width:680px;height:auto;max-height:94vh;top:3vh;bottom:auto;border-radius:14px}
   #rotate{position:fixed;inset:0;z-index:90;background:#0f1220;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;text-align:center;padding:20px}
   @media (orientation: portrait){ #rotate.ask{display:flex} }
   .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
@@ -103,6 +103,8 @@
   .mbox{flex:0 0 auto !important;width:min(460px,92%);margin:auto;background:#1d2340;border:2px solid #6a74c0;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:7px;box-shadow:0 6px 24px rgba(0,0,0,.6)}
   .mtitle{text-align:center;font-weight:bold;font-size:16px;color:#ffe066}
   .rwopt{background:#2a3060;border:2px solid #5560a8;border-radius:8px;padding:7px 6px;font-size:13px;font-weight:bold;color:#eef;text-align:center;line-height:1.3}
+  .diag{display:flex;gap:8px;align-items:flex-start}.dsvg{flex:1.1;min-width:0}.dlist{flex:1;min-width:0}
+  .mini.on{background:#ffe066;color:#222}
   .rwopt.sel{border-color:#ffe066;background:#3d3a20}.rwopt:disabled{opacity:.3}
   .rwbar{position:sticky;bottom:0;gap:6px;background:rgba(10,12,24,.96);padding-top:4px}
   .pick.sel{border-color:#ffe066;background:#3d3a20}.pick:disabled{opacity:.35}
@@ -298,6 +300,20 @@ const SYN = [
   { id: "corrupt",   a: "mark",   b: "dark",   name: "타락",       desc: "낙인이 8초 저주로 바뀜" },
   { id: "blizzard",  a: "chill",  b: "wind",   name: "눈보라",     desc: "냉기 중첩이 주변(130) 적에게 퍼지고 +1", need: "max" }
 ];
+const ATTR_COL = { normal: "#ffffff", blade: "#ff6a7a", proj: "#ffb0b8", fire: "#ff8a30", elec: "#ffe066", ice: "#9fe0ff", water: "#4aa8ff", wind: "#9ff0c8", poison: "#7be07b", holy: "#fff0a8", dark: "#c08aff", boom: "#ffb040" };
+function hitFx(s, tgt, src, d, sk, weak){   // 타격감(그림 전용, 전투 결과에는 영향 없음): 번쩍임·찌그러짐·불꽃·멈칫·흔들림
+  tgt.hitT = 8; const big = d / Math.max(1, tgt.maxHp);
+  if (!src) return;   // 지속 피해는 번쩍임만
+  const col = sk ? ATTR_COL[SKILL[sk].attrs.find(a => a !== "normal") || "normal"] : "#ffffff";
+  const ang = Math.atan2(tgt.y - src.y, tgt.x - src.x), n = Math.min(12, 4 + Math.round(big * 40));
+  s.sparks = s.sparks || [];
+  for (let i = 0; i < n && s.sparks.length < 160; i++){ const a = ang + (Math.random() - 0.5) * 2.2, v = 2 + Math.random() * 4 + big * 10;
+    s.sparks.push({ x: tgt.x - Math.cos(ang) * tgt.R * 0.6, y: tgt.y - Math.sin(ang) * tgt.R * 0.6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 14 + Math.random() * 8, col }); }
+  s.rings = s.rings || []; if (s.rings.length < 20) s.rings.push({ x: tgt.x, y: tgt.y, r: tgt.R, t: 0, col });
+  tgt.kx = Math.cos(ang) * Math.min(7, 2 + big * 30); tgt.ky = Math.sin(ang) * Math.min(7, 2 + big * 30);   // 맞은 쪽으로 살짝 밀려 보임
+  if (tgt.id === 0){ s.hurtT = 12; s.shake = Math.min(9, s.shake + 2 + big * 25); }
+  else { s.shake = Math.min(9, s.shake + 1 + big * 18 + (weak ? 1.5 : 0)); s.hitstop = Math.max(s.hitstop || 0, Math.min(6, Math.round(big * 30) + (weak ? 2 : 0))); }
+}
 const synIcon = y => STATUS[y.a].icon + ATTR[y.b].icon;
 const synNeed = y => y.need === "max" ? STATUS[y.a].max : (y.need || 1);
 // 속성 단련(대장간): 단계마다 규칙 확률 +5%p와 효과 지속 증가. 투사체는 관통·반사 확률이 함께 오름
@@ -716,7 +732,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "29.4";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "29.5";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 0.5;
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -926,8 +942,8 @@ function hurt(s, tgt, src, amount, sk){
   tgt.hp -= d; if (tgt.markT > 0) tgt.markAcc += d;   // 낙인: 받은 피해 기록
   if (src && src.id === 0 && src.fx.lifesteal) src.hp = Math.min(src.maxHp, src.hp + d * src.fx.lifesteal);        // 유물: 흡혈
   if (tgt.id === 0 && tgt.fx.thorns && src && src.id !== 0 && !src.dead) src.hp -= tgt.fx.thorns;                   // 유물: 가시
-  s.shake = Math.min(7, s.shake + (tgt.id !== 0 && d >= 12 ? 4 : 1.5));
-  if (tgt.id !== 0 && s.pops.length < 30) s.pops.push({ x: tgt.x, y: tgt.y - tgt.R, t: 0, txt: fmt(d) + (mult > 1.01 ? "↑" : mult < 0.99 ? "↓" : "") });
+  hitFx(s, tgt, src, d, sk, mult > 1.01);
+  if (tgt.id !== 0 && s.pops.length < 30) s.pops.push({ x: tgt.x + (Math.random() - 0.5) * 14, y: tgt.y - tgt.R, t: 0, txt: fmt(d) + (mult > 1.01 ? "!" : mult < 0.99 ? "↓" : ""), dmg: Math.min(1, d / Math.max(1, tgt.maxHp) * 6), col: mult > 1.01 ? "#ffe066" : mult < 0.99 ? "#9aa" : "#fff" });
   if (s.depth < 3){ s.depth++; fire(s, tgt, "damaged", {}); s.depth--; }
   if (sk && src && SKILL[sk].attrs.includes("boom") && !s.splash){   // 폭발 속성: 주변 다른 적에게 30%가 튐
     s.splash = true; for (const f of foesOf(s, src)) if (f !== tgt && Math.hypot(f.x - tgt.x, f.y - tgt.y) < 60 + f.R) hurt(s, f, src, amount * 0.3); s.splash = false;
@@ -980,6 +996,10 @@ function step(s){
   if (s.winner !== null) return;
   s.tick++;
   if (s.shake > 0) s.shake = Math.max(0, s.shake - 0.4);
+  if (s.hurtT > 0) s.hurtT--;
+  if (s.sparks && s.sparks.length){ for (const p of s.sparks){ p.x += p.vx; p.y += p.vy; p.vx *= 0.86; p.vy *= 0.86; p.t--; } s.sparks = s.sparks.filter(p => p.t > 0); }
+  if (s.rings && s.rings.length){ for (const g of s.rings) g.t++; s.rings = s.rings.filter(g => g.t < 12); }
+  for (const k of s.balls){ if (k.hitT > 0) k.hitT--; if (k.kx){ k.kx *= 0.7; k.ky *= 0.7; if (Math.abs(k.kx) + Math.abs(k.ky) < 0.2) k.kx = k.ky = 0; } }
   const P = s.balls[0], alive = s.balls.filter(b => !b.dead);
   if (s.tick === 1){
     for (const k of alive) fire(s, k, "start", {});   // 전투 시작할 때
@@ -1884,8 +1904,12 @@ function drawScene(c, st, preview){
   }
   for (const k of st.balls){
     if (k.dead) continue;
-    c.beginPath(); c.arc(k.x, k.y, k.R, 0, 6.29); c.fillStyle = k.color; c.fill();
+    const hx = k.x + (k.kx || 0), hy = k.y + (k.ky || 0), hq = (k.hitT || 0) / 8;
+    c.save(); c.translate(hx, hy); if (hq > 0){ const ang = Math.atan2(k.ky || 0, k.kx || 1); c.rotate(ang); c.scale(1 - 0.18 * hq, 1 + 0.12 * hq); c.rotate(-ang); }
+    c.beginPath(); c.arc(0, 0, k.R, 0, 6.29); c.fillStyle = k.color; c.fill();
     c.lineWidth = 3; c.strokeStyle = k.ring; c.stroke();
+    if (hq > 0){ c.globalAlpha = Math.min(1, hq * 1.3) * 0.85; c.fillStyle = "#fff"; c.fill(); c.globalAlpha = 1; }
+    c.restore();
     if (k.shieldT > 0 && k.shieldHp > 0){ c.beginPath(); c.arc(k.x, k.y, k.R + 5, 0, 6.29); c.strokeStyle = "#7fe3ff"; c.lineWidth = 3; c.stroke(); }
     if (k.slowT > 0){ c.beginPath(); c.arc(k.x, k.y, k.R + 3, 0, 6.29); c.strokeStyle = "#9fd0ff"; c.setLineDash([4, 4]); c.lineWidth = 2; c.stroke(); c.setLineDash([]); }
     if (k.dots.length){ c.fillStyle = "rgba(80,220,100,.35)"; c.beginPath(); c.arc(k.x, k.y, k.R, 0, 6.29); c.fill(); }
@@ -1919,7 +1943,10 @@ function drawScene(c, st, preview){
     const f = other(st, k); if (!f) continue; const a = aimAngle(k, f, k.shotQ[0].spd);
     c.save(); c.globalAlpha = 0.5; c.setLineDash([5, 5]); c.strokeStyle = k.id === 0 ? "#ffe066" : "#ff8080"; c.lineWidth = 2; c.beginPath(); c.moveTo(k.x, k.y); c.lineTo(k.x + Math.cos(a) * 90, k.y + Math.sin(a) * 90); c.stroke(); c.restore();
   }
-  for (const p of st.pops){ c.globalAlpha = clamp(1 - p.t / 40, 0, 1); c.fillStyle = "#fff"; c.font = "bold 14px system-ui"; c.textAlign = "center"; c.fillText(p.txt, p.x, p.y - p.t * 0.6); c.globalAlpha = 1; }
+  for (const g of st.rings || []){ c.globalAlpha = 1 - g.t / 12; c.strokeStyle = g.col; c.lineWidth = 3 * (1 - g.t / 12) + 1; c.beginPath(); c.arc(g.x, g.y, g.r + g.t * 2.5, 0, 6.29); c.stroke(); } c.globalAlpha = 1;
+  for (const p of st.sparks || []){ c.globalAlpha = Math.min(1, p.t / 10); c.strokeStyle = p.col; c.lineWidth = 2.5; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x - p.vx * 1.6, p.y - p.vy * 1.6); c.stroke(); } c.globalAlpha = 1;
+  for (const p of st.pops){ const pop = p.dmg != null ? 1 + Math.max(0, 1 - p.t / 6) * 0.6 : 1, fs = p.dmg != null ? Math.round((13 + p.dmg * 12) * pop) : 14;
+    c.globalAlpha = clamp(1 - p.t / 40, 0, 1); c.font = `900 ${fs}px system-ui`; c.textAlign = "center"; c.lineWidth = 3; c.strokeStyle = "rgba(0,0,0,.7)"; c.strokeText(p.txt, p.x, p.y - p.t * 0.6); c.fillStyle = p.col || "#fff"; c.fillText(p.txt, p.x, p.y - p.t * 0.6); c.globalAlpha = 1; }
   c.restore();
   if (preview){
     c.fillStyle = "#ffe066"; c.font = "bold 14px system-ui"; c.textAlign = "center"; c.fillText("미리보기", W / 2, 20);
@@ -1940,9 +1967,10 @@ function drawScene(c, st, preview){
     c.fillText(st.winner === 0 ? "승리!" : st.winner === 1 ? "패배…" : "무승부 · 재대결", W / 2, H / 2 + 9);
   }
 }
+function drawHurt(c, st){ if (!(st.hurtT > 0)) return; const a = st.hurtT / 12 * 0.45, g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.7); g.addColorStop(0, "rgba(255,0,0,0)"); g.addColorStop(1, `rgba(255,30,30,${a})`); c.fillStyle = g; c.fillRect(0, 0, W, H); }
 function draw(){
   ctx.clearRect(0, 0, W, H);
-  if (state && phase !== "prep"){ drawScene(ctx, state, false); return; }
+  if (state && phase !== "prep"){ drawScene(ctx, state, false); drawHurt(ctx, state); return; }
   if (phase === "prep" && pv){ drawScene(ctx, pv, true); return; }
   ctx.fillStyle = "#889"; ctx.font = "16px system-ui"; ctx.textAlign = "center"; 
 }
@@ -1964,7 +1992,46 @@ function infoStats(){ const r = runState, fx = relicFx(r); return `<div class="c
 document.getElementById("bInfo").onclick = () => runState && openInfo("📊 정보", infoStats() + (runState.enc ? deckGlanceHtml(runState) + deckAttrHtml(runState) : ""));
 document.getElementById("bRelic").onclick = () => runState && openInfo("🏺 유물", relicHtml(runState));
 document.getElementById("bPot").onclick = () => runState && openInfo("🧪 물약", potionHtml(runState), el => el.querySelectorAll("button[data-dp]").forEach(b => b.onclick = () => { runState.potions.splice(Number(b.dataset.dp), 1); document.getElementById("bPot").onclick(); }));
-document.getElementById("bAttr").onclick = () => openInfo("🧬 속성·시너지·상성", attrHtml().replace('<details class="card">', '<div class="card">').replace("</details>", "</div>"));
+const RING = ["blade", "proj", "fire", "ice", "elec", "water", "boom", "wind", "poison", "holy", "dark"];   // 원형 배치 순서 (상성 고리가 이웃하게)
+function attrDiagram(mode, focus){   // mode: "beat" 상성 / "syn" 시너지 · focus: 누른 속성(그 속성의 화살표만 진하게)
+  const S = 340, C = S / 2, Rr = 128, pos = {};
+  RING.forEach((a, i) => { const t = -Math.PI / 2 + i * 2 * Math.PI / RING.length; pos[a] = { x: C + Rr * Math.cos(t), y: C + Rr * Math.sin(t) }; });
+  const edges = [];
+  if (mode === "beat") for (const a in BEATS) for (const b of BEATS[a]) edges.push({ a, b, col: "#7be07b" });
+  else for (const y of SYN) edges.push({ a: STATUS[y.a].src, b: y.b, col: ATTR_COL[STATUS[y.a].src], lab: STATUS[y.a].icon, y });
+  let g = `<defs>${[...new Set(edges.map(e => e.col))].map((c, i) => `<marker id="ah${i}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="${c}"/></marker>`).join("")}</defs>`;
+  const cols = [...new Set(edges.map(e => e.col))];
+  for (const e of edges){
+    const p = pos[e.a], q = pos[e.b], on = !focus || focus === e.a || focus === e.b, op = on ? 0.95 : 0.12;
+    const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, r0 = 19;
+    const x1 = p.x + ux * r0, y1 = p.y + uy * r0, x2 = q.x - ux * (r0 + 3), y2 = q.y - uy * (r0 + 3);
+    const bend = mode === "syn" ? 26 : 14, mx = (x1 + x2) / 2 - uy * bend, my = (y1 + y2) / 2 + ux * bend;   // 오른쪽으로 휘게 → 서로 반대 방향 화살표가 겹치지 않음
+    g += `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" fill="none" stroke="${e.col}" stroke-width="${on && focus ? 3 : 2}" opacity="${op}" marker-end="url(#ah${cols.indexOf(e.col)})"/>`;
+    if (e.lab){ const lx = 0.25 * x1 + 0.5 * mx + 0.25 * x2, ly = 0.25 * y1 + 0.5 * my + 0.25 * y2; g += `<text x="${lx.toFixed(1)}" y="${(ly + 5).toFixed(1)}" font-size="13" text-anchor="middle" opacity="${op}">${e.lab}</text>`; }
+  }
+  for (const a of RING){ const p = pos[a], on = focus === a;
+    g += `<g class="anode" data-at="${a}" style="cursor:pointer"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="18" fill="#1d2340" stroke="${on ? "#ffe066" : ATTR_COL[a]}" stroke-width="${on ? 3 : 2}"/><text x="${p.x.toFixed(1)}" y="${(p.y + 6).toFixed(1)}" font-size="17" text-anchor="middle">${ATTR[a].icon}</text><text x="${p.x.toFixed(1)}" y="${(p.y + (p.y > C ? 33 : -23)).toFixed(1)}" font-size="10" fill="#cde" text-anchor="middle">${ATTR[a].name}</text></g>`; }
+  return `<svg viewBox="0 0 ${S} ${S}" style="width:100%;max-height:calc(94vh - 120px);display:block;margin:0 auto">${g}</svg>`;
+}
+function synListHtml(focus){
+  const L = SYN.filter(y => !focus || STATUS[y.a].src === focus || y.b === focus);
+  return L.map(y => `<div class="small">${ATTR[STATUS[y.a].src].icon}→${STATUS[y.a].icon}${STATUS[y.a].name}${synNeed(y) > 1 ? `×${synNeed(y)}` : ""} + ${ATTR[y.b].icon} = <b>${y.name}</b> · ${y.desc}</div>`).join("");
+}
+function beatListHtml(focus){
+  if (!focus) return `<div class="small">약점 ×${WEAK_MUL} · 저항 ×${RESIST_MUL}</div>`;
+  const win = BEATS[focus] || [], lose = weakOfAll(focus);
+  return `<div class="small">${ATTR[focus].icon} > ${win.map(a => ATTR[a].icon + ATTR[a].name).join(" ") || "-"}<br>${ATTR[focus].icon} < ${lose.map(a => ATTR[a].icon + ATTR[a].name).join(" ") || "-"}</div>`;
+}
+let diaMode = "syn", diaFocus = null;
+function openAttrInfo(){
+  openInfo("🧬 속성", `<div class="row" style="justify-content:center;gap:6px"><button class="mini${diaMode === "syn" ? " on" : ""}" id="dmS">시너지</button><button class="mini${diaMode === "beat" ? " on" : ""}" id="dmB">상성</button></div>
+    <div class="small" style="text-align:center;color:#99a">${diaMode === "syn" ? "a 속성 → (상태이상) → b 속성 공격" : "이기는 쪽 → 지는 쪽"}</div>
+    <div class="diag"><div class="dsvg">${attrDiagram(diaMode, diaFocus)}</div><div class="dlist">${diaMode === "syn" ? synListHtml(diaFocus) : beatListHtml(diaFocus)}</div></div>
+    <details class="card" style="margin-top:6px"><summary class="small">속성 규칙</summary>${ATTR_LIST.map(a => `<div class="small"><b>${ATTR[a].icon} ${ATTR[a].name}</b> ${ATTR[a].rules.join(" / ")}</div>`).join("")}</details>`,
+  el => { el.querySelector("#dmS").onclick = () => { diaMode = "syn"; openAttrInfo(); }; el.querySelector("#dmB").onclick = () => { diaMode = "beat"; openAttrInfo(); };
+    el.querySelectorAll(".anode").forEach(n => n.onclick = () => { diaFocus = diaFocus === n.dataset.at ? null : n.dataset.at; openAttrInfo(); }); });
+}
+document.getElementById("bAttr").onclick = openAttrInfo;
 document.getElementById("bDice").onclick = () => runState && openInfo("🎲 레벨업 주사위", diceHtml(runState));
 document.getElementById("bDev").onclick = () => { const box = document.getElementById("devbox"); openInfo("🛠 개발 도구", `<div class="small" style="margin-bottom:6px">버튼을 누르면 창이 닫히고 바로 적용돼요</div>`, el => { const b = el.querySelector(".vbody"), row = box.firstElementChild; b.appendChild(row);
   const back = () => { if (row.parentElement !== box) box.appendChild(row); if (document.getElementById("info").contains(b)) closeInfo(); };
@@ -2412,7 +2479,7 @@ function loop(now){
   { const on = phase !== "prep" && phase !== "battle"; if (panel.classList.contains("on") !== on){ panel.classList.toggle("on", on); panel.scrollTop = 0; } if (loop.ph !== phase){ loop.ph = phase; panel.scrollTop = 0; panel.classList.toggle("modal", phase === "reward" || phase === "relic"); } }
   if (state && phase === "battle" && !paused){
     acc += Math.min(100, now - last) * speed;
-    while (acc >= 1000 / 60){ step(state); acc -= 1000 / 60; for (const p of state.pops) p.t++; }
+    while (acc >= 1000 / 60){ acc -= 1000 / 60; if (state.hitstop > 0 && speed <= 2){ state.hitstop--; continue; } state.hitstop = 0; step(state); for (const p of state.pops) p.t++; }
     state.pops = state.pops.filter(p => p.t < 40);
     updateBattleUi();
     if (state.winner !== null && !ended){ ended = true; setTimeout(onBattleEnd, 900); }
