@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 32</title>
+<title>볼배틀 탑 - 데모 32.1</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -166,7 +166,7 @@
 <div id="rotate" class="ask"><div style="font-size:40px">📱↻</div><b>가로 화면으로 돌려 주세요</b><div class="small">이 게임은 가로 화면에 맞춰져 있어요</div><button id="rotFull">⛶ 전체 화면으로 (가로 고정 시도)</button><button class="mini" id="rotSkip">그래도 세로로 보기</button></div>
 <div id="info"></div>
 <div id="devbox" style="display:none">
-  <div class="row"><button id="dbg" class="dbg">🛠 전체 길 ON</button><button id="dbgI" class="dbg">🛠 검사시간 정상</button><button id="dbgRestart" class="dbg">🛠 재시작</button><button id="dbgNext" class="dbg">🛠 다음 층</button><button id="dbgAct" class="dbg">🛠 다음 보스</button><button id="buildBtn" class="dbg">🛠 최적 빌드</button><button id="vaultBtn" class="dbg">🛠 문장 만들기</button></div>
+  <div class="row"><button id="dbg" class="dbg">🛠 전체 길 ON</button><button id="dbgI" class="dbg">🛠 검사시간 정상</button><button id="dbgRestart" class="dbg">🛠 재시작</button><button id="dbgNext" class="dbg">🛠 다음 층</button><button id="dbgAct" class="dbg">🛠 다음 보스</button><button id="buildBtn" class="dbg">🛠 최적 빌드</button><button id="dbgEnemy" class="dbg">🛠 적 고르기</button><button id="vaultBtn" class="dbg">🛠 문장 만들기</button></div>
 </div>
 <div id="panel"></div>
 <div id="vault"></div><div id="bdlg"></div>
@@ -764,7 +764,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "32";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "32.1";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -2746,6 +2746,28 @@ function renderBuilds(){
 // 개발용: 새 런으로 재시작 / 보상 없이 다음 층으로 바로 이동(전투 중이면 전투를 버림)
 function dbgReset(){ buildsOn = false; renderBuilds(); vaultOn = false; renderVault(); paused = false; pauseBtn.disabled = true; skipBtn.disabled = true; potionsEl.innerHTML = ""; prepNote = ""; selId = null; focusZ = null; }
 document.getElementById("dbgRestart").onclick = () => { dbgReset(); newGame(); };
+// 🛠 적 고르기: 기믹 적·일반 적·보스 중 하나를 골라 지금 층에서 바로 붙음
+function dbgFight(id, kind){
+  const r = runState; dbgReset(); state = null; mapSel = null; const f = Math.max(r.floor, 1);
+  if (kind === "boss"){ const [a, j] = id.split(":").map(Number), B = BOSSES[a][j], ef = effFloor(f);
+    const hp = Math.round(ENEMY_HP0 * Math.pow(ENEMY_HP_GROW, ef - 1) * 2.0 * actMul(f, ACT_HP)), atk = +(ENEMY_ATK0 * Math.pow(ENEMY_ATK_GROW, ef - 1) * 1.1 * actMul(f, ACT_ATK)).toFixed(1), ab = B.abs.map(x => mkAb(x[0], x[1], x[2]));
+    r.enc = [{ hp, maxHp: hp, atk, def: 2 + Math.floor(ef / 3), minI: MIN_INTERVAL, scanMul: ENEMY_SCAN, name: B.name, icon: B.icon, color: B.color, ring: "#d08aff", tag: "boss", R: 28, abilities: ab, ...affinityOf(ab) }];
+    r.encKind = "elite";   // 층은 그대로(보스 보상 대신 정예 보상)
+  } else { const t = ETYPES[id], fm = FORMATIONS[t.form || "single"]; r.enc = Array.from({ length: fm.n }, () => makeEnemy(f, id, fm, kind, r.rng)); r.encKind = kind; }
+  r.retry = 0; addTemps(r); closeInfo(); prepNote = `🛠 ${r.enc[0].icon} ${r.enc[0].name}${kind === "elite" ? " (정예)" : ""}`; renderPrep();
+}
+function openEnemyPicker(){
+  const tag = id => { const t = ETYPES[id]; return [t.trait ? TRAIT_TXT[t.trait] : "", t.gives ? GIVE_TXT[t.gives] : "", t.abs.some(a => SKILL[a[3]].enemy) ? "적 전용 문장" : ""].filter(Boolean).join(" · "); };
+  const gim = ETYPE_IDS.filter(id => tag(id)), plain = ETYPE_IDS.filter(id => !tag(id));
+  const btn = id => `<button class="pick" data-fe="${id}" style="padding:6px 8px"><b style="font-size:13px">${ETYPES[id].icon} ${ETYPES[id].name}</b><span class="small">${tag(id) || `${ETYPES[id].act ? ETYPES[id].act + "막 테마" : ""}`}</span></button>`;
+  openInfo("🛠 적 고르기", `<div class="small">현재 층(${runState.floor}층) 수치로 바로 붙어요 · <label><input type="checkbox" id="feElite"> 정예로</label></div>
+    <div class="shelfh" style="margin-top:6px">기믹 있는 적</div><div class="tiles" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${gim.map(btn).join("")}</div>
+    <div class="shelfh" style="margin-top:6px">일반 적</div><div class="tiles" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${plain.map(btn).join("")}</div>
+    <div class="shelfh" style="margin-top:6px">보스</div><div class="tiles" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${BOSSES.map((pool, a) => pool.map((B, j) => `<button class="pick" data-fb="${a}:${j}" style="padding:6px 8px"><b style="font-size:13px">${B.icon} ${B.name}</b><span class="small">${a + 1}막</span></button>`).join("")).join("")}</div>`,
+    el => { el.querySelectorAll("[data-fe]").forEach(b => b.onclick = () => dbgFight(b.dataset.fe, el.querySelector("#feElite").checked ? "elite" : "normal"));
+      el.querySelectorAll("[data-fb]").forEach(b => b.onclick = () => dbgFight(b.dataset.fb, "boss")); });
+}
+document.getElementById("dbgEnemy").onclick = () => setTimeout(openEnemyPicker, 20);
 document.getElementById("dbgNext").onclick = () => {
   const r = runState; if (!r || phase === "over") return;
   if (r.floor >= TOP_FLOOR){ dbgReset(); prepNote = "🛠 이미 마지막 층(보스)이에요"; renderPrep(); return; }
