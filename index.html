@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 29.9</title>
+<title>볼배틀 탑 - 데모 30</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -226,6 +226,9 @@ const SKILL = {
   freeze:   { label: "빙결",     desc: "상대를 2.5초간 크게 감속 + 냉기 +2", g: "방해", rar: 2 },
   shield:   { label: "보호막",    desc: "5초간 피해 18을 흡수", g: "보조", rar: 2 },
   heal:     { label: "회복",     desc: "체력 8 회복", g: "보조", rar: 2 },
+  ritual:   { label: "광신", desc: "공격 +20% (쌓임)", g: "적", rar: 0, enemy: true },   // 적 전용
+  quake:    { label: "지진", desc: "거리와 상관없이 피해", g: "적", rar: 0, enemy: true },
+  charge:   { label: "충전", desc: "5초 뒤 대폭발 (피해를 주면 끊김)", g: "적", rar: 0, enemy: true },
   heal5:    { label: "작은 회복", desc: "체력 5 회복", g: "보조", rar: 0, start: true },   // 시작 덱 전용 (보상에 안 나옴)
   atk:      { label: "공격력 증가", desc: "공격력 영구 +5%", g: "보조", rar: 2 },
   brew:     { label: "물약 제조", desc: "랜덤 물약 1개를 만듦 (전투당 6개까지 보관, 칸이 가득 차면 가장 오래된 물약을 마시고 받음, 그 뒤로는 만들자마자 마심)", g: "보조", rar: 1.5 },
@@ -727,6 +730,9 @@ const EFF = {
     if (me.id === 0 && s.hooks.grant && s.brewCount < BREW_KEEP){ let ok = s.hooks.grant(); if (!ok && s.hooks.drink && s.hooks.drink()) ok = s.hooks.grant(); if (ok){ s.brewCount++; if (s.pops.length < 30) s.pops.push({ x: me.x, y: me.y - me.R - 6, t: 0, txt: "🧪+1" }); if (s.depth < 3){ s.depth++; fire(s, me, "potget", {}); s.depth--; } } }
   },
   heal: (s, me, foe, ab) => { if (me.curseT > 0) return; me.hp = Math.min(me.maxHp, me.hp + Math.min(BIG, 8 * me.mod.heal.pow)); },
+  ritual: (s, me) => { me.atkBonus += 0.2; popS(s, me.x, me.y - me.R - 14, "🕯+20%"); },
+  quake: (s, me, foe, ab) => { if (!foe) return; s.shake = Math.min(9, s.shake + 4); s.booms.push({ x: foe.x, y: foe.y, r: 40, t: 0, col: "#c9a36a" }); hurt(s, foe, me, pw(me, 28, ab)); },
+  charge: (s, me) => { me.chargeT = me.chargeMax = T(CHARGE_SEC); me.chargeNeed = me.maxHp * CHARGE_BREAK; me.chargeDmg = 0; popS(s, me.x, me.y - me.R - 14, "⏳충전!"); },
   heal5: (s, me, foe, ab) => { if (me.curseT > 0) return; me.hp = Math.min(me.maxHp, me.hp + Math.min(BIG, 5 * me.mod.heal5.pow)); },
   atk: (s, me, foe, ab) => { me.atkBonus = Math.min(BIG, me.atkBonus + 0.05 * me.mod.atk.pow); }
 };
@@ -736,7 +742,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "29.9";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "30";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 0.5;
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -823,7 +829,7 @@ function newBall(id, x, y, ang, cfg){
   const fx = cfg.fx || {}, mod = {};
   for (const k in SKILL){ const u = (fx.up && fx.up[k]) || 0, fm = forgeMul(k, u); mod[k] = { pow: (fx.modPow || 1) * fm.pow, area: fm.area, cd: (fx.modCd || 1) * fm.cd }; mod[k].pow0 = mod[k].pow; mod[k].spd = 1; mod[k].exec = 1; /* pow0: 전투 시작 때 위력(강화는 이것의 25%씩 더함) */ }
   if (cfg.scanMul != null && id === 0) for (const a of cfg.abilities) if (a.kind === "law" && mod[a.eff]) LAWS[a.law].apply(mod[a.eff], 1 + 0.5 * (a.lv || 0));   // 법칙형: 전투 내내 적용
-  return { id, x, y, hx: Math.cos(ang), hy: Math.sin(ang), scan: cfg.scanMul != null ? (sl => ({ i: 0, t: Math.max(3, T(sl)), busy: 0, slot: sl, mul: cfg.scanMul }))(id === 0 ? scanSlot(cfg.abilities.length) * cfg.scanMul : SCAN_T * cfg.scanMul) : null, spd: cfg.spd != null ? cfg.spd : 3.5, R: cfg.R || R, name: cfg.name || "나", icon: cfg.icon || "", color: cfg.color || "#4aa3ff", ring: cfg.ring || "#fff", tag: cfg.tag || "me",
+  return { id, cfg, trait: cfg.trait || null, chargeT: 0, revT: 0, x, y, hx: Math.cos(ang), hy: Math.sin(ang), scan: cfg.scanMul != null ? (sl => ({ i: 0, t: Math.max(3, T(sl)), busy: 0, slot: sl, mul: cfg.scanMul }))(id === 0 ? scanSlot(cfg.abilities.length) * cfg.scanMul : SCAN_T * cfg.scanMul) : null, spd: cfg.spd != null ? cfg.spd : 3.5, R: cfg.R || R, name: cfg.name || "나", icon: cfg.icon || "", color: cfg.color || "#4aa3ff", ring: cfg.ring || "#fff", tag: cfg.tag || "me",
     maxHp: cfg.maxHp, hp: cfg.hp, atk: cfg.atk, def: cfg.def, atkBonus: 0, minI: cfg.minI, dashT: 0, dashMult: 1, dead: false, fx,
     hasteT: 0, hasteMult: 1, invulnT: 0, revived: false, spikes: cfg.spikes || 0, castMul: 1, lastCast: {}, wetT: 0, stagT: 0, stagHit: false, markT: 0, markAcc: 0, markSrc: null, curseT: 0,
     slowT: 0, slowMult: 1, shieldHp: 0, shieldT: 0, dots: [], mod, weak: cfg.weak || [], resist: cfg.resist || [],
@@ -956,7 +962,8 @@ function hurt(s, tgt, src, amount, sk){
   if (s.tick > OT_START) d *= 1 + (s.tick - OT_START) / OT_RAMP;   // 연장전
   d = clamp(d, 0.1, BIG);
   if (tgt.shieldT > 0 && tgt.shieldHp > 0){ const ab = Math.min(tgt.shieldHp, d); tgt.shieldHp -= ab; d -= ab; if (d <= 0) return; }
-  tgt.hp -= d; if (tgt.markT > 0) tgt.markAcc += d;   // 낙인: 받은 피해 기록
+  tgt.hp -= d; if (tgt.markT > 0) tgt.markAcc += d;
+  if (tgt.chargeT > 0 && (tgt.chargeDmg += d) >= tgt.chargeNeed){ tgt.chargeT = 0; popS(s, tgt.x, tgt.y - tgt.R - 14, "✋끊김!"); if (tgt.scan) tgt.scan.busy = Math.max(tgt.scan.busy, T(1.5)); }   // 낙인: 받은 피해 기록
   if (src && src.id === 0 && src.fx.lifesteal) src.hp = Math.min(src.maxHp, src.hp + d * src.fx.lifesteal);        // 유물: 흡혈
   if (tgt.id === 0 && tgt.fx.thorns && src && src.id !== 0 && !src.dead) src.hp -= tgt.fx.thorns;                   // 유물: 가시
   hitFx(s, tgt, src, d, sk, mult > 1.01);
@@ -1162,7 +1169,8 @@ function step(s){
     const to = nearestOf(s.balls.filter(b => b.id !== 0 && !b.dead && b.hp > 0 && b !== k), k);
     if (to){ for (const dt of k.dots){ if (to.dots.length >= 3) to.dots.shift(); to.dots.push({ ...dt }); } k.dots = []; s.bolts.push({ x1: k.x, y1: k.y, x2: to.x, y2: to.y, t: 0, col: "#6ae06a" }); popS(s, to.x, to.y - to.R - 20, "☠전염!"); }
   }
-  for (const k of s.balls) if (k.id !== 0 && !k.dead && k.hp <= 0){ k.dead = true; s.booms.push({ x: k.x, y: k.y, r: 30, t: 0 }); if (!P.dead && s.depth < 3){ s.depth++; fire(s, P, "kill", {}); s.depth--; } }
+  for (const k of s.balls) traitTick(s, k);
+  for (const k of s.balls) if (k.id !== 0 && !k.dead && k.hp <= 0){ k.dead = true; if (k.trait === "revive") k.revT = T(REVIVE_SEC); s.booms.push({ x: k.x, y: k.y, r: 30, t: 0 }); if (!P.dead && s.depth < 3){ s.depth++; fire(s, P, "kill", {}); s.depth--; } }
   if (P.hp <= 0 && P.fx.revive > 0 && !P.revived){   // 유물: 불사조 깃털
     P.revived = true; P.hp = P.maxHp * 0.5; P.invulnT = T(1.5); s.reviveUsed = true;
     s.pops.push({ x: P.x, y: P.y - P.R - 6, t: 0, txt: "🪶 부활!" });
@@ -1194,6 +1202,13 @@ const ETYPES = {
   warlock:{ name: "흑마법사", icon: "🧙", color: "#9a5ad0", from: 1, act: 3, hp: 0.85, atk: 1.15, def: 0, abs: [[1,"interval",5,"hex"], [4,"damaged",1,"hex"], [7,"interval",6,"shield"]] },
   paladin:{ name: "성기사", icon: "😇", color: "#ffe9a0", from: 1, act: 4, hp: 1.3, atk: 0.9, def: 2, abs: [[1,"interval",5,"judgment"], [3,"interval",6,"shield"], [7,"hit",1,"spin"]] },
   sapper: { name: "폭파병", icon: "🧨", color: "#ff7a3a", from: 1, act: 4, hp: 0.9, atk: 1.1, def: 0, abs: [[1,"interval",4,"nova"], [4,"wall",1,"bomb"], [7,"damaged",1,"nova"]] },
+  // ----- 개성 있는 적 (데모 30) -----
+  cultist:{ name: "광신도", icon: "🕯", color: "#c8a060", from: 2, hp: 1.3, atk: 0.8, def: 1, abs: [[1,"interval",4,"ritual"], [1,"interval",4,"shoot"], [6,"interval",6,"missile"]] },
+  slime:  { name: "분열 슬라임", icon: "🟢", color: "#5ac85a", from: 3, hp: 1.4, atk: 0.8, def: 0, trait: "split", abs: [[1,"interval",4,"dash"], [5,"hit",1,"nova"]] },
+  charger:{ name: "공성 마법사", icon: "🔮", color: "#8a6ad8", from: 5, hp: 1.4, atk: 1.0, def: 2, abs: [[1,"interval",5,"charge"], [1,"interval",4,"shoot"]] },
+  ghost:  { name: "덧없는 자", icon: "👻", color: "#c0d0e8", from: 6, hp: 1.6, atk: 2.4, def: 0, trait: "fade", abs: [[1,"interval",3,"nova"], [1,"hit",1,"dash"]] },
+  shade:  { name: "그림자", icon: "🌑", color: "#4a4a6a", from: 7, hp: 0.8, atk: 0.9, def: 0, trait: "revive", form: "trio", abs: [[1,"interval",4,"dash"], [4,"interval",5,"shoot"]] },
+  doom:   { name: "종말의 종", icon: "🔔", color: "#b84a4a", from: 9, hp: 3.2, atk: 0.9, def: 2, trait: "doom", abs: [[1,"interval",2.5,"quake"]] },
   storm:  { name: "번개술사",icon: "⚡", color: "#d8c83a", from: 5, hp: 0.85, atk: 1.05, def: 0,  abs: [[1,"interval",5,"lightning"], [4,"damaged",1,"nova"], [7,"effect","lightning","missile"]] }
 };
 // 속성 상성(5속성 순환): 앞이 뒤를 이김 → 전기 > 날붙이 > 투사체 > 불 > 얼음 > 전기
@@ -1233,6 +1248,28 @@ const BOSSES = [
     { name: "탑의 주인", icon: "👑", color: "#8a4ad0", abs: [["interval", 3, "shoot"], ["interval", 5, "spin"], ["interval", 5, "lightning"], ["damaged", 1, "missile"], ["hit", 1, "spin"]] } ] // 🏹🗡 → 약점 ⚡
 ];
 // 편성: 마리 수가 늘면 각 마리의 스펙이 나뉨 (체력·공격력·방어력 배율)
+// 특성: 적 고유 규칙 (traitTick에서 처리)
+const CHARGE_SEC = 5, CHARGE_BREAK = 0.15, FADE_SEC = 20, DOOM_SEC = 15, REVIVE_SEC = 4;
+const TRAIT_TXT = { split: "🟢 체력 절반에서 둘로 분열", fade: `👻 매초 공격 -5% · ${FADE_SEC}초 뒤 사라짐`, revive: `🌑 쓰러져도 동료가 살아 있으면 ${REVIVE_SEC}초 뒤 부활`, doom: `🔔 ${DOOM_SEC}초 뒤 자폭` };
+function traitTick(s, k){
+  if (k.id === 0) return;
+  if (k.dead){   // 그림자: 부활 대기
+    if (k.revT > 0 && --k.revT === 0){ if (s.balls.some(b => b.id !== 0 && b !== k && !b.dead)){ k.dead = false; k.hp = k.maxHp * 0.5; k.dots = []; k.burnT = 0; popS(s, k.x, k.y - k.R - 14, "🌑부활!"); s.booms.push({ x: k.x, y: k.y, r: 36, t: 0, col: "#8a8ab8" }); } }
+    return;
+  }
+  if (k.chargeT > 0 && --k.chargeT === 0){   // 충전 완료: 대폭발
+    const P = s.balls[0]; s.shake = 9; s.booms.push({ x: P.x, y: P.y, r: 70, t: 0, col: "#b48aff" }); popS(s, k.x, k.y - k.R - 14, "💥대폭발!");
+    if (!P.dead) hurt(s, P, k, k.atk * (1 + k.atkBonus) * 5);
+  }
+  if (k.trait === "fade"){ if (s.tick % 60 === 0 && s.tick > 0) k.atkBonus = Math.max(-0.9, k.atkBonus - 0.05); if (s.tick >= T(FADE_SEC)){ k.hp = 0; popS(s, k.x, k.y - k.R - 14, "👻사라짐"); } }
+  if (k.trait === "doom" && s.tick >= T(DOOM_SEC)){ k.hp = 0; s.shake = 9; s.booms.push({ x: k.x, y: k.y, r: 80, t: 0 }); popS(s, k.x, k.y - k.R - 14, "🔔자폭"); }
+  if (k.trait === "split" && !k.didSplit && k.hp > 0 && k.hp <= k.maxHp * 0.5){   // 분열: 남은 체력을 둘이 나눠 가짐
+    k.didSplit = true; const h = k.hp, R2 = Math.max(14, Math.round(k.R * 0.8)); k.maxHp = h; k.R = R2;
+    const c = { ...k.cfg, hp: h, maxHp: h, R: R2, trait: null }, nb = newBall(s.balls.length, k.x, k.y, s.rng() * 6.28, c);
+    nb.didSplit = true; nb.x = clamp(k.x + (s.rng() - 0.5) * 30, R2, W - R2); nb.y = clamp(k.y + (s.rng() - 0.5) * 30, R2, H - R2); s.balls.push(nb);
+    popS(s, k.x, k.y - k.R - 14, "🟢분열!");
+  }
+}
 const FORMATIONS = {
   single: { label: "단독", n: 1, hp: 1.0,  atk: 1.0, def: 1.0, from: 1, w: 6 },
   twins:  { label: "2마리", n: 2, hp: 0.5,  atk: 0.9, def: 1.0, from: 3, w: 3 },
@@ -1255,7 +1292,7 @@ function makeEnemy(f, typeId, form, kind, rng){
     const pool = ETYPE_IDS.filter(id => (ETYPES[id].act || 1) <= actOf(f)), o = ETYPES[pool[Math.floor(rng() * pool.length)]], a = o.abs[0]; abs.push(mkAb(a[1], a[2], a[3]));
   }
   const spikes = t.spikes || (elite && f >= 6 && rng() < 0.35) ? SPIKES : 0;   // 가시 갑옷: 수호병은 항상, 6층부터 정예 35%
-  return { hp, maxHp: hp, atk, def, minI: MIN_INTERVAL, scanMul: ENEMY_SCAN, name: t.name, icon: t.icon, color: t.color, ring: elite ? "#ffb040" : "#fff", tag: kind, R: elite ? 25 : 22, abilities: abs, spikes, ...affinityOf(abs) };
+  return { hp, maxHp: hp, atk, def, minI: MIN_INTERVAL, scanMul: ENEMY_SCAN, trait: t.trait || null, name: t.name, icon: t.icon, color: t.color, ring: elite ? "#ffb040" : "#fff", tag: kind, R: elite ? 25 : 22, abilities: abs, spikes, ...affinityOf(abs) };
 }
 function genEncounter(r, kind){
   const rng = r.rng, f = r.floor;
@@ -1269,8 +1306,10 @@ function genEncounter(r, kind){
   const act = actOf(f), types = ETYPE_IDS.filter(id => ETYPES[id].from <= effFloor(f) && (ETYPES[id].act || 1) <= act);
   const pickT = () => pickW(types, id => (ETYPES[id].act || 1) === act && act > 1 ? 3 : 1);   // 그 막의 테마 적이 더 자주 나옴
   if (kind === "elite") return [makeEnemy(f, pickT(), FORMATIONS.single, "elite", rng)];
+  const t0 = pickT();
+  if (ETYPES[t0].form){ const fm = FORMATIONS[ETYPES[t0].form]; return Array.from({ length: fm.n }, () => makeEnemy(f, t0, fm, "normal", rng)); }   // 무리로만 나오는 적 (그림자)
   const form = pickW(Object.values(FORMATIONS).filter(x => x.from <= effFloor(f)), x => x.w);
-  return Array.from({ length: form.n }, () => makeEnemy(f, pickT(), form, "normal", rng));
+  return Array.from({ length: form.n }, (_, i) => makeEnemy(f, i === 0 ? t0 : (t => ETYPES[t].form ? t0 : t)(pickT()), form, "normal", rng));
 }
 function encounterText(enc){   // (옛 화면용)
   return enc.map(e => `<b>${e.icon} ${e.name}</b> 체력 ${fmt(e.hp)} · 공격 ${fmt(e.atk)} · 방어 ${e.def}${e.attrs && e.attrs.length ? `<br>속성 ${attrIcons(e.attrs)} · 약점 ${attrIcons(e.weak)}${e.resist.length ? ` · 저항 ${attrIcons(e.resist)}` : ""}` : ""}<br><span style="color:#ffe066">${e.abilities.map(a => describe(a)).join("<br>")}</span>${e.spikes ? `<br><span style="color:#ff9a7a">🦔 가시 갑옷 — 돌진 피해의 ${Math.round(e.spikes * 100)}%를 되돌려요</span>` : ""}`).join("<hr style='border:0;border-top:1px solid #3a4170;margin:5px 0'>");
@@ -1338,7 +1377,7 @@ function condGate(r, id){
 const ACT1_WEAK = { c_t10: 0.15, c_start: 0.2, c_hp50: 0.15, c_kill: 0.15, c_combo: 0.15, c_potion: 0.05 };   // 1막엔 시작 문장보다 못한 조건은 거의 안 나옴 (나머지는 빈도 희귀도 그대로)
 const isAct1 = r => actOf(Math.min(r.floor, TOP_FLOOR)) === 1;
 const condW = (r, id) => !condGate(r, id) ? 0 : COND2[id].rar * (isAct1(r) ? (ACT1_WEAK[id] != null ? ACT1_WEAK[id] : 1) : 1);
-const skillW = (r, sk) => isAct1(r) ? (SKILL[sk].g === "공격" ? 3 : ["shield", "heal", "atk"].includes(sk) ? 1 : 0.2) : SKILL[sk].rar;
+const skillW = (r, sk) => SKILL[sk].enemy || SKILL[sk].start ? 0 : isAct1(r) ? (SKILL[sk].g === "공격" ? 3 : ["shield", "heal", "atk"].includes(sk) ? 1 : 0.2) : SKILL[sk].rar;
 function prefixOpts(r, type){
   if (type === "cond") return pickDistinct(Object.keys(COND2).filter(id => condW(r, id) > 0), id => condW(r, id), 3, r.rng);
   const used = usedSkills(r);   // 법칙은 덱에서 쓰는 스킬이 더 잘 나옴
@@ -1938,7 +1977,10 @@ function drawScene(c, st, preview){
     c.fillStyle = bm.col ? "rgba(140,240,255,.35)" : "rgba(255,160,60,.45)"; c.fill(); c.strokeStyle = bm.col || "#ffd24a"; c.lineWidth = 3; c.stroke(); c.globalAlpha = 1;
   }
   for (const k of st.balls){
-    if (k.dead) continue;
+    if (k.dead){ if (k.revT > 0){ c.globalAlpha = 0.35; c.beginPath(); c.arc(k.x, k.y, k.R, 0, 6.29); c.fillStyle = k.color; c.fill(); c.globalAlpha = 1; c.fillStyle = "#ccd"; c.font = "bold 13px system-ui"; c.textAlign = "center"; c.fillText((k.revT / 60).toFixed(1), k.x, k.y + 5); } continue; }
+    if (k.chargeT > 0){ const p = 1 - k.chargeT / k.chargeMax; c.beginPath(); c.arc(k.x, k.y, k.R + 8, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#c08aff"; c.lineWidth = 4; c.stroke();
+      c.fillStyle = "#e0c8ff"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText(`⏳${(k.chargeT / 60).toFixed(1)} ✋${fmt(Math.max(0, k.chargeNeed - k.chargeDmg))}`, k.x, k.y - k.R - 14); }
+    if (k.trait === "doom" || k.trait === "fade"){ const left = (k.trait === "doom" ? DOOM_SEC : FADE_SEC) - st.tick / 60; c.fillStyle = "#ffb0b0"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText(`${k.trait === "doom" ? "🔔" : "👻"}${Math.max(0, left).toFixed(1)}`, k.x, k.y + k.R + 13); }
     const hx = k.x + (k.kx || 0), hy = k.y + (k.ky || 0), hq = (k.hitT || 0) / 8;
     c.save(); c.translate(hx, hy); if (hq > 0){ const ang = Math.atan2(k.ky || 0, k.kx || 1); c.rotate(ang); c.scale(1 - 0.18 * hq, 1 + 0.12 * hq); c.rotate(-ang); }
     c.beginPath(); c.arc(0, 0, k.R, 0, 6.29); c.fillStyle = k.color; c.fill();
@@ -2191,7 +2233,7 @@ const leftBody = () => document.getElementById("leftBody"), rightEl = () => docu
 function enemyCards(enc, live){   // 오른쪽: 적마다 이름·능력치·속성·문장 목록 (live = 전투 중이면 볼)
   return enc.map((e, ei) => { const k = live ? live.balls[ei + 1] : null;
     return `<div class="ecard" id="en${ei}"><div class="lab"><b style="color:#fff">${e.icon} ${e.name}</b><span>${k ? `❤${fmt(Math.max(0, k.hp))}/${fmt(k.maxHp)}` : `❤${fmt(e.hp)}`} ⚔${fmt(e.atk)} 🛡${e.def}</span></div>
-      <div class="small">${e.attrs && e.attrs.length ? `속성 ${attrIcons(e.attrs)} · 약점 ${attrIcons(e.weak) || "없음"}${e.resist.length ? ` · 저항 ${attrIcons(e.resist)}` : ""}` : "속성 없음"}${e.spikes ? " · 🦔가시 갑옷" : ""}</div>
+      ${e.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[e.trait]}</div>` : ""}<div class="small">${e.attrs && e.attrs.length ? `속성 ${attrIcons(e.attrs)} · 약점 ${attrIcons(e.weak) || "없음"}${e.resist.length ? ` · 저항 ${attrIcons(e.resist)}` : ""}` : "속성 없음"}${e.spikes ? " · 🦔가시 갑옷" : ""}</div>
       ${e.abilities.map((ab, i) => `<div class="card sentc" id="es${ei}_${i}" style="margin-top:3px;padding:4px 6px"><div class="desc" style="margin:0">${i + 1}. ${abText(ab)}</div></div>`).join("")}</div>`; }).join("");
 }
 function renderPrep(){
@@ -2324,7 +2366,7 @@ function startBattle(){
   pv = null; state = startFight(r); phase = "battle"; ended = false; acc = 0; last = performance.now(); skipBtn.disabled = false;
   paused = false; pauseBtn.disabled = false; pauseBtn.textContent = "⏸"; renderPotions();
   leftBody().innerHTML = `<div class="sideh">📜 내 문장</div>` + r.deck.map((x, i) => `<div class="card sentc" id="slot${i}"><div class="lab"><span>${i + 1}. ${sentTag(x)}</span><span class="cnt"></span></div><div class="desc">${sentText(x)}</div></div>`).join("");
-  rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(r.enc, state);
+  rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(state.balls.slice(1).map(k => k.cfg), state);
 }
 function updateBattleUi(){
   if (!state || phase !== "battle") return;
@@ -2333,6 +2375,7 @@ function updateBattleUi(){
       const cur = !k.dead && i === sc.i && sc.busy <= 0, run = !k.dead && sc.busy > 0 && i === (sc.i - 1 + n) % n;
       card.classList.toggle("scan", cur); card.classList.toggle("exec", run); card.classList.toggle("ready", !k.dead && !!ab.ready && !run);
       const el = card.querySelector(".cnt"); if (el) el.textContent = ab.kind === "law" ? "법칙" : `실행 ${ab.fired}회${k.frozenT > 0 ? " · 🧊" : ""}`; }); };
+  if (document.querySelectorAll("#right .ecard").length !== state.balls.length - 1) rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(state.balls.slice(1).map(k => k.cfg), state);   // 분열 등으로 적 수가 바뀌면 다시 그림
   mark(state.balls[0], i => "slot" + i);
   state.balls.slice(1).forEach((k, ei) => { mark(k, i => `es${ei}_${i}`); const c = document.getElementById("en" + ei); if (c){ c.style.opacity = k.dead ? 0.35 : 1; const hp = c.querySelector(".lab span"); if (hp) hp.textContent = `❤${fmt(Math.max(0, k.hp))}/${fmt(k.maxHp)} ⚔${fmt(k.atk)} 🛡${k.def}`; } });
   state.flash.splice(0);
