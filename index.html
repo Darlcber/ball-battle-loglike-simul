@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 31</title>
+<title>볼배틀 탑 - 데모 32</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -89,6 +89,7 @@
   .sentc{position:relative}
   .tick{position:absolute;left:-27px;width:24px;border-top:1px solid #ffe066;font-size:9px;color:#ffe066;line-height:1;padding-top:1px;text-align:left;pointer-events:none}
   .dh{display:inline-block;padding:0 7px 0 2px;margin-right:2px;cursor:grab;touch-action:none;color:#9ab;font-size:16px;user-select:none}
+  .sentc.temp{border-style:dashed;border-color:#9a7ad8}.sentc.veiled{opacity:.4}
   .sentc.drag{opacity:.5}.sentc.dropat{box-shadow:0 -3px 0 #ffe066}.dropend .decklist .sentc:last-child{box-shadow:0 3px 0 #ffe066}
   .sentc.ready{animation:rdy 1s ease-in-out infinite;border-color:#7fd8ff}
   @keyframes rdy{0%,100%{box-shadow:0 0 3px 1px rgba(120,210,255,.35)}50%{box-shadow:0 0 12px 4px rgba(120,210,255,.85)}}
@@ -242,6 +243,9 @@ const SKILL = {
   ritual:   { label: "광신", desc: "공격 +20% (쌓임)", g: "적", rar: 0, enemy: true },   // 적 전용
   quake:    { label: "지진", desc: "거리와 상관없이 피해", g: "적", rar: 0, enemy: true },
   charge:   { label: "충전", desc: "5초 뒤 대폭발 (피해를 주면 끊김)", g: "적", rar: 0, enemy: true },
+  selfhurt: { label: "체력 8% 잃음", desc: "", g: "적", rar: 0, temp: true },   // 임시 문장 전용
+  jump5:    { label: "5번 문장으로 이동", desc: "", g: "적", rar: 0, temp: true },
+  pierce:   { label: "꿰뚫기", desc: "망령에게도 들어가는 일격", g: "공격", rar: 0, temp: true },
   heal5:    { label: "작은 회복", desc: "체력 5 회복", g: "보조", rar: 0, start: true },   // 시작 덱 전용 (보상에 안 나옴)
   atk:      { label: "공격력 증가", desc: "공격력 영구 +5%", g: "보조", rar: 2 },
   brew:     { label: "물약 제조", desc: "랜덤 물약 1개를 만듦 (전투당 6개까지 보관, 칸이 가득 차면 가장 오래된 물약을 마시고 받음, 그 뒤로는 만들자마자 마심)", g: "보조", rar: 1.5 },
@@ -531,6 +535,8 @@ function describe(ab){
 // tier: 희귀도(c 일반 / u 희귀 / l 전설, 높을수록 덜 나오고 상점 가격이 비쌈). fx: 효과 수치(아래 relicFx가 합산). pickup: 얻는 즉시 적용.
 const RELIC = {
   whetstone:{ name: "숫돌",          icon: "🪨", tier: "c", desc: "공격력 +2", fx: { atk: 2 } },
+  veil:     { name: "문장가리개", icon: "🎭", tier: "u", desc: "전투마다 문장 1개를 가려 뺄 수 있음 (덱에서 👁)", fx: { veil: 1 } },
+  veil2:    { name: "큰 문장가리개", icon: "👺", tier: "l", desc: "가릴 수 있는 문장 +1", fx: { veil: 1 } },
   plate:    { name: "방패 조각",      icon: "🔰", tier: "c", desc: "방어력 +2", fx: { def: 2 } },
   ginseng:  { name: "인삼",          icon: "🌱", tier: "c", desc: "최대 체력 +20 (얻는 즉시)", fx: {}, pickup: r => { r.maxHp += 20; r.hp += 20; } },
   salve:    { name: "연고",          icon: "🧴", tier: "c", desc: "전투 후 회복량 +10%p", fx: { healAfter: 0.1 } },
@@ -574,7 +580,7 @@ function pickByTier(ids, tierOf, weights, rng){
 const RELIC_MULT = new Set(["xpMul", "modPow", "modCd", "potionPow", "gapMul"]);   // 곱해지는 수치, 나머지는 더해짐
 function relicFx(r){
   const o = { atk: 0, def: 0, healAfter: 0, potionSlots: 0, xpMul: 1, thorns: 0, readyStart: 0, lifesteal: 0, gapMul: 1, modPow: 1, modCd: 1, startShield: 0,
-              regen: 0, dropBonus: 0, compass: 0, startBlast: 0, doubleCast: 0, diceExtra: 0, potionPow: 1, attrAll: 0, alchemy: 0, plague: 0, bloodTrail: 0 };
+              regen: 0, veil: 0, dropBonus: 0, compass: 0, startBlast: 0, doubleCast: 0, diceExtra: 0, potionPow: 1, attrAll: 0, alchemy: 0, plague: 0, bloodTrail: 0 };
   for (const x of r.relics) for (const k in RELIC[x.id].fx) o[k] = RELIC_MULT.has(k) ? o[k] * RELIC[x.id].fx[k] : o[k] + RELIC[x.id].fx[k];
   return o;
 }
@@ -746,6 +752,9 @@ const EFF = {
   ritual: (s, me) => { me.atkBonus += 0.2; popS(s, me.x, me.y - me.R - 14, "🕯+20%"); },
   quake: (s, me, foe, ab) => { if (!foe) return; s.shake = Math.min(9, s.shake + 4); s.booms.push({ x: foe.x, y: foe.y, r: 40, t: 0, col: "#c9a36a" }); hurt(s, foe, me, pw(me, 28, ab)); },
   charge: (s, me) => { me.chargeT = me.chargeMax = T(CHARGE_SEC); me.chargeNeed = me.maxHp * CHARGE_BREAK; me.chargeDmg = 0; popS(s, me.x, me.y - me.R - 14, "⏳충전!"); },
+  selfhurt: (s, me) => { const d = me.maxHp * 0.08; me.hp -= d; s.hurtT = 12; popS(s, me.x, me.y - me.R - 14, "⛓-" + fmt(d)); },
+  jump5: (s, me) => { if (!me.scan) return; me.scan.i = Math.min(4, me.abs.length - 1); me.scan.t = Math.max(3, T(me.scan.slot)); popS(s, me.x, me.y - me.R - 14, "🔀5번"); },
+  pierce: (s, me, foe, ab) => { if (!foe) return; s.bolts.push({ x1: me.x, y1: me.y, x2: foe.x, y2: foe.y, t: 0, col: "#e8f0ff" }); hurt(s, foe, me, pw(me, 24, ab), "pierce"); },
   heal5: (s, me, foe, ab) => { if (me.curseT > 0) return; me.hp = Math.min(me.maxHp, me.hp + Math.min(BIG, 5 * me.mod.heal5.pow)); },
   atk: (s, me, foe, ab) => { me.atkBonus = Math.min(BIG, me.atkBonus + 0.05 * me.mod.atk.pow); }
 };
@@ -755,7 +764,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "31";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "32";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -768,7 +777,7 @@ const ENTITY = { spin: { exec: 2.5 }, shoot: { exec: 2 }, bomb: { exec: 2.5 }, d
   lightning: { exec: 3 }, poison: { exec: 2 }, missile: { exec: 2.5 }, fireball: { exec: 3 }, frostbolt: { exec: 2.5 }, freeze: { exec: 2.5 }, sonic: { exec: 2.5 },
   watergun: { exec: 2.5 }, gust: { exec: 2 }, needle: { exec: 2 }, judgment: { exec: 3 }, hex: { exec: 3 },
   shield: { exec: 2 }, heal: { exec: 2 }, heal5: { exec: 2 }, atk: { exec: 2 }, accel: { exec: 2 }, brew: { exec: 2 }, drink: { exec: 1.5 },
-  ritual: { exec: 1 }, quake: { exec: 1.5 }, charge: { exec: 1 } };
+  ritual: { exec: 1 }, quake: { exec: 1.5 }, charge: { exec: 1 }, selfhurt: { exec: 0.5 }, jump5: { exec: 0.3 }, pierce: { exec: 0.6 } };
 const entExec = sk => (ENTITY[sk] && ENTITY[sk].exec) || EXEC_T;
 const SPEEDY = ["shoot", "missile", "fireball", "frostbolt", "watergun", "needle", "boomerang", "dash"];   // 속도 법칙이 의미 있는 개체
 // 조건형 앞자리(조건). rar: 클수록 흔함 → 좋은 조건일수록 작게
@@ -791,6 +800,10 @@ const LAWS = {   // 법칙형 뒷자리. apply(mod, x): x = 강화 배율(1, 1.5
   l_exec:  { label: "실행 시간 -40%", rar: 1.5, fits: () => true, apply: (m, x) => { m.exec *= Math.pow(0.6, x); } },
   l_twin:  { label: "두 번 실행(두 번째는 위력 50%)", rar: 0.6, fits: sk => SKILL[sk].g === "공격", apply: m => { m.twin = true; } }
 };
+// 임시 문장 전용 조건 (보상에 안 나옴)
+COND2.c_nottop3 = { id: "c_nottop3", label: "이 문장이 1~3번에 없을 때", trig: "selfpos", tp: 3, rar: 0, temp: true };
+COND2.c_t8 = { id: "c_t8", label: "8초마다", trig: "interval", tp: 8, rar: 0, temp: true };
+COND2.c_t01 = { id: "c_t01", label: "0.1초마다", trig: "interval", tp: 0.1, rar: 0, temp: true };
 for (const k in STATUS) COND2["c_st_" + k] = { id: "c_st_" + k, label: `상대에게 ${STATUS[k].name}이(가) 걸릴 때`, trig: "stapply", tp: k, rar: 1.8 };
 // ===== 조건 희귀도 = 실행 빈도로 정함 (데모 29.9) =====
 // READY_SEC: 실행 뒤 다시 준비되기까지 평균 초 (봇 측정: 10문장 덱, 3~15층 40전투, /tmp/freq2.js). 자주 준비되는 조건일수록 보상에 덜 나옴
@@ -829,7 +842,7 @@ function lawExec(s, k, ab){   // 법칙: 전투마다 검사기가 처음 지나
 function scanTick(s, k){
   const sc = k.scan; if (!k.abs.length) return;
   for (const ab of k.abs) if (ab.kind === "cond" && !ab.ready){
-    if (ab.trig === "interval" ? s.tick - ab.last >= T(ab.tp) : ab.trig === "start" ? !ab.used : ab.trig === "metric" ? metricTrue(s, k, ab.tp) : false) ab.ready = true;
+    if (ab.trig === "interval" ? s.tick - ab.last >= Math.max(1, T(ab.tp)) : ab.trig === "start" ? !ab.used : ab.trig === "metric" ? metricTrue(s, k, ab.tp) : ab.trig === "selfpos" ? ab.sent >= ab.tp : false) ab.ready = true;
   }
   if (sc.busy > 0){ sc.busy--; if (k.cast && --k.cast.t <= 0){ const ab = k.cast.ab; k.cast = null; run(s, k, ab, ab.sent); } return; }
   const ab = k.abs[sc.i];
@@ -961,6 +974,7 @@ function procAttrs(s, tgt, src, sk){
 }
 function hurt(s, tgt, src, amount, sk){
   if (tgt.hp <= 0 || tgt.dead || tgt.invulnT > 0) return;
+  if (tgt.trait === "immune" && sk !== "pierce"){ if (src && s.tick % 20 === 0) popS(s, tgt.x, tgt.y - tgt.R - 8, "무효"); return; }   // 망령 기사: 꿰뚫기만 피해
   let mult = 1;
   if (sk){ const at = SKILL[sk].attrs; if (at.some(a => tgt.weak.includes(a))) mult = WEAK_MUL; else if (at.some(a => tgt.resist.includes(a))) mult = RESIST_MUL; }
   if (tgt.shockT > 0) mult *= 1.25;   // 감전
@@ -1232,6 +1246,10 @@ const ETYPES = {
   ghost:  { name: "덧없는 자", icon: "👻", color: "#c0d0e8", from: 6, hp: 1.6, atk: 2.4, def: 0, trait: "fade", abs: [[1,"interval",3,"nova"], [1,"hit",1,"dash"]] },
   shade:  { name: "그림자", icon: "🌑", color: "#4a4a6a", from: 7, hp: 0.8, atk: 0.9, def: 0, trait: "revive", form: "trio", abs: [[1,"interval",4,"dash"], [4,"interval",5,"shoot"]] },
   doom:   { name: "종말의 종", icon: "🔔", color: "#b84a4a", from: 9, hp: 3.2, atk: 0.9, def: 2, trait: "doom", abs: [[1,"interval",2.5,"quake"]] },
+  // ----- 임시 문장을 주는 적 (데모 32) -----
+  jailer: { name: "족쇄 간수", icon: "⛓", color: "#8a8a9a", from: 4, hp: 1.2, atk: 0.9, def: 2, gives: "curse", abs: [[1,"interval",4,"dash"], [5,"interval",6,"shield"]] },
+  clock:  { name: "시계공", icon: "🕰", color: "#c8a86a", from: 6, hp: 1.0, atk: 1.0, def: 1, gives: "jump", abs: [[1,"interval",4,"missile"], [4,"hit",1,"nova"]] },
+  wraith: { name: "망령 기사", icon: "👤", color: "#7a8ab8", from: 8, hp: 0.9, atk: 1.3, def: 0, trait: "immune", gives: "pierce", abs: [[1,"interval",4,"spin"], [5,"interval",5,"dash"]] },
   storm:  { name: "번개술사",icon: "⚡", color: "#d8c83a", from: 5, hp: 0.85, atk: 1.05, def: 0,  abs: [[1,"interval",5,"lightning"], [4,"damaged",1,"nova"], [7,"effect","lightning","missile"]] }
 };
 // 속성 상성(5속성 순환): 앞이 뒤를 이김 → 전기 > 날붙이 > 투사체 > 불 > 얼음 > 전기
@@ -1273,7 +1291,9 @@ const BOSSES = [
 // 편성: 마리 수가 늘면 각 마리의 스펙이 나뉨 (체력·공격력·방어력 배율)
 // 특성: 적 고유 규칙 (traitTick에서 처리)
 const CHARGE_SEC = 5, CHARGE_BREAK = 0.15, FADE_SEC = 20, DOOM_SEC = 15, REVIVE_SEC = 4;
-const TRAIT_TXT = { split: "🟢 체력 절반에서 둘로 분열", fade: `👻 매초 공격 -5% · ${FADE_SEC}초 뒤 사라짐`, revive: `🌑 쓰러져도 동료가 살아 있으면 ${REVIVE_SEC}초 뒤 부활`, doom: `🔔 ${DOOM_SEC}초 뒤 자폭` };
+const GIVE_SENT = { curse: ["c_nottop3", "selfhurt"], jump: ["c_t8", "jump5"], pierce: ["c_t01", "pierce"] };   // 적이 주는 임시 문장
+const GIVE_TXT = { curse: "⛓ 저주 문장을 덱에 넣음", jump: "🕰 이동 문장을 덱에 넣음", pierce: "🗡 꿰뚫기 문장을 덱에 넣음" };
+const TRAIT_TXT = { immune: "👤 꿰뚫기로만 피해를 입음", split: "🟢 체력 절반에서 둘로 분열", fade: `👻 매초 공격 -5% · ${FADE_SEC}초 뒤 사라짐`, revive: `🌑 쓰러져도 동료가 살아 있으면 ${REVIVE_SEC}초 뒤 부활`, doom: `🔔 ${DOOM_SEC}초 뒤 자폭` };
 function traitTick(s, k){
   if (k.id === 0) return;
   if (k.dead){   // 그림자: 부활 대기
@@ -1315,7 +1335,7 @@ function makeEnemy(f, typeId, form, kind, rng){
     const pool = ETYPE_IDS.filter(id => (ETYPES[id].act || 1) <= actOf(f)), o = ETYPES[pool[Math.floor(rng() * pool.length)]], a = o.abs[0]; abs.push(mkAb(a[1], a[2], a[3]));
   }
   const spikes = t.spikes || (elite && f >= 6 && rng() < 0.35) ? SPIKES : 0;   // 가시 갑옷: 수호병은 항상, 6층부터 정예 35%
-  return { hp, maxHp: hp, atk, def, minI: MIN_INTERVAL, scanMul: ENEMY_SCAN, trait: t.trait || null, name: t.name, icon: t.icon, color: t.color, ring: elite ? "#ffb040" : "#fff", tag: kind, R: elite ? 25 : 22, abilities: abs, spikes, ...affinityOf(abs) };
+  return { hp, maxHp: hp, atk, def, minI: MIN_INTERVAL, scanMul: ENEMY_SCAN, trait: t.trait || null, gives: t.gives || null, name: t.name, icon: t.icon, color: t.color, ring: elite ? "#ffb040" : "#fff", tag: kind, R: elite ? 25 : 22, abilities: abs, spikes, ...affinityOf(abs) };
 }
 function genEncounter(r, kind){
   const rng = r.rng, f = r.floor;
@@ -1369,7 +1389,12 @@ const SAVE_KEY = "ballTowerSave2";
 function saveGame(where){ try { if (!runState) return; localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 2, where, r: runState }, (k, v) => k === "rng" ? undefined : v)); } catch (e) {} }
 function loadGame(){ try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); if (!d || d.v !== 2 || !d.r) return null; const r = d.r; r.rng = rngOf(r); r.slots = r.decks[0].slots; return { r, where: d.where }; } catch (e) { return null; } }
 function clearSave(){ try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
-function beginFloor(r, kind){ r.encKind = kind; r.enc = genEncounter(r, kind); r.retry = 0; }
+function beginFloor(r, kind){ r.encKind = kind; r.enc = genEncounter(r, kind); r.retry = 0; addTemps(r); }
+function addTemps(r){
+  dropTemps(r); const gv = [...new Set(r.enc.map(e => e.gives).filter(Boolean))];
+  gv.reverse().forEach(g => r.deck.unshift({ ...mkSent(r, "cond", GIVE_SENT[g][0], GIVE_SENT[g][1]), temp: true }));
+}
+const dropTemps = r => { r.deck = r.deck.filter(x => !x.temp); };
 function ensureBoss(r){ if (isBossFloor(r.floor) && r.encKind !== "boss") beginFloor(r, "boss"); }
 // 다음 층으로 들어갈 때: 막의 첫 층이면 새 지도 + 고정 전투, 보스층이면 보스. 돌려주는 값: 지도에서 길을 골라야 하면 true
 function enterFloor(r){
@@ -1399,8 +1424,8 @@ function condGate(r, id){
 // 1막: 시작 문장보다 확실히 나은 기본 조각을 많이 (시너지는 약해도 초반을 버티게)
 const ACT1_WEAK = { c_t10: 0.15, c_start: 0.2, c_hp50: 0.15, c_kill: 0.15, c_combo: 0.15, c_potion: 0.05 };   // 1막엔 시작 문장보다 못한 조건은 거의 안 나옴 (나머지는 빈도 희귀도 그대로)
 const isAct1 = r => actOf(Math.min(r.floor, TOP_FLOOR)) === 1;
-const condW = (r, id) => !condGate(r, id) ? 0 : COND2[id].rar * (isAct1(r) ? (ACT1_WEAK[id] != null ? ACT1_WEAK[id] : 1) : 1);
-const skillW = (r, sk) => SKILL[sk].enemy || SKILL[sk].start ? 0 : isAct1(r) ? (SKILL[sk].g === "공격" ? 3 : ["shield", "heal", "atk"].includes(sk) ? 1 : 0.2) : SKILL[sk].rar;
+const condW = (r, id) => COND2[id].temp || !condGate(r, id) ? 0 : COND2[id].rar * (isAct1(r) ? (ACT1_WEAK[id] != null ? ACT1_WEAK[id] : 1) : 1);
+const skillW = (r, sk) => SKILL[sk].enemy || SKILL[sk].start || SKILL[sk].temp ? 0 : isAct1(r) ? (SKILL[sk].g === "공격" ? 3 : ["shield", "heal", "atk"].includes(sk) ? 1 : 0.2) : SKILL[sk].rar;
 function prefixOpts(r, type){
   if (type === "cond") return pickDistinct(Object.keys(COND2).filter(id => condW(r, id) > 0), id => condW(r, id), 3, r.rng);
   const used = usedSkills(r);   // 법칙은 덱에서 쓰는 스킬이 더 잘 나옴
@@ -1484,8 +1509,10 @@ function copyDeck(r, from, to){   // 고정된 블록이 있는 덱에는 덮어
 function lockDeck(r){
   for (const sl of r.slots){ if (sl.w) sl.lk.w = true; if (sl.v) sl.lk.v = true; if (sl.c) sl.lk.c = true; if (sl.t) sl.lk.t = true; if (sl.a) sl.lk.a = true; }
 }
+const isVeiled = (r, x) => !x.temp && (r.veiled || []).includes(x.uid);
+const activeDeck = r => r.deck.filter(x => !isVeiled(r, x));   // 이번 전투에 들어가는 문장 (가린 문장 제외)
 function playerCfg(r){
-  const fx = relicFx(r), abilities = r.deck.map((x, i) => sentAb(x, i));
+  const fx = relicFx(r), abilities = activeDeck(r).map((x, i) => sentAb(x, i));
   return { hp: r.hp, maxHp: r.maxHp, atk: r.atk + fx.atk, def: r.def + fx.def, abilities, scanMul: gapMulOf(r),
            fx: { ...fx, up: r.up, attrLv: r.attrUp, revive: r.relics.filter(x => x.id === "phoenix" && !x.used).length } };
 }
@@ -1503,6 +1530,7 @@ function rollDice(r){
   return f;
 }
 function winFloor(r, s, kind){
+  dropTemps(r);
   const fx = relicFx(r), f = r.floor, mul = kind === "elite" ? 1.5 : 1, gold = Math.round((15 + absFloor(f) * 4) * mul) + (r.fightBonusGold || 0), xp = Math.round(xpFor(f, kind) * fx.xpMul), out = { gold, xp, rolls: [] };
   r.fightBonusGold = 0;
   if (s.reviveUsed){ const ph = r.relics.find(x => x.id === "phoenix" && !x.used); if (ph) ph.used = true; }
@@ -2259,18 +2287,22 @@ const leftBody = () => document.getElementById("leftBody"), rightEl = () => docu
 function enemyCards(enc, live){   // 오른쪽: 적마다 이름·능력치·속성·문장 목록 (live = 전투 중이면 볼)
   return enc.map((e, ei) => { const k = live ? live.balls[ei + 1] : null;
     return `<div class="ecard" id="en${ei}"><div class="lab"><b style="color:#fff">${e.icon} ${e.name}</b><span>${k ? `❤${fmt(Math.max(0, k.hp))}/${fmt(k.maxHp)}` : `❤${fmt(e.hp)}`} ⚔${fmt(e.atk)} 🛡${e.def}</span></div>
-      ${e.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[e.trait]}</div>` : ""}<div class="small">${e.attrs && e.attrs.length ? `속성 ${attrIcons(e.attrs)} · 약점 ${attrIcons(e.weak) || "없음"}${e.resist.length ? ` · 저항 ${attrIcons(e.resist)}` : ""}` : "속성 없음"}${e.spikes ? " · 🦔가시 갑옷" : ""}</div>
+      ${e.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[e.trait]}</div>` : ""}${e.gives ? `<div class="small" style="color:#d8b8ff">${GIVE_TXT[e.gives]}</div>` : ""}<div class="small">${e.attrs && e.attrs.length ? `속성 ${attrIcons(e.attrs)} · 약점 ${attrIcons(e.weak) || "없음"}${e.resist.length ? ` · 저항 ${attrIcons(e.resist)}` : ""}` : "속성 없음"}${e.spikes ? " · 🦔가시 갑옷" : ""}</div>
       ${e.abilities.map((ab, i) => `<div class="card sentc" id="es${ei}_${i}" style="margin-top:3px;padding:4px 6px"><div class="desc" style="margin:0">${i + 1}. ${abText(ab)}</div></div>`).join("")}</div>`; }).join("");
 }
 // ===== 덱 목록 (준비 화면 왼쪽 · 📜 덱 창 공용) =====
 // 시간 눈금: 실행 없이 검사만 할 때 몇 초에 어느 문장을 지나는지 (문장당 scanSlot초)
-function deckListHtml(r, editable){
-  const n = r.deck.length, sl = scanSlot(n) * gapMulOf(r);
-  return r.deck.map((x, i) => {
-    let ticks = ""; for (let sec = Math.ceil(i * sl + 1e-6); sec < (i + 1) * sl - 1e-6; sec++){ if (sec === 0) continue; ticks += `<span class="tick" style="top:${((sec - i * sl) / sl * 100).toFixed(0)}%">${sec}초</span>`; }
-    return `<div class="card sentc" id="slot${i}" data-di="${i}">${ticks}<div class="lab"><span>${editable ? `<span class="dh" data-dh="${i}">≡</span>` : ""}${i + 1}. ${sentTag(x)}</span>${editable ? `<span><button class="mini" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button><button class="mini" data-dn="${i}" ${i === n - 1 ? "disabled" : ""}>▼</button></span>` : `<span class="cnt"></span>`}</div><div class="desc">${sentText(x)}</div></div>`; }).join("");
+function deckListHtml(r, editable, battle){
+  const act = activeDeck(r), n = act.length, sl = scanSlot(n) * gapMulOf(r), vmax = relicFx(r).veil;
+  r.veiled = (r.veiled || []).filter(u => r.deck.some(x => x.uid === u && !x.temp)).slice(0, vmax);
+  return (battle ? act : r.deck).map((x, i) => {
+    const vi = isVeiled(r, x), ai = act.indexOf(x); let ticks = "";
+    if (!vi) for (let sec = Math.ceil(ai * sl + 1e-6); sec < (ai + 1) * sl - 1e-6; sec++){ if (sec === 0) continue; ticks += `<span class="tick" style="top:${((sec - ai * sl) / sl * 100).toFixed(0)}%">${sec}초</span>`; }
+    const veilBtn = editable && vmax && !x.temp ? `<button class="mini${vi ? " on" : ""}" data-veil="${x.uid}" title="가리기">${vi ? "🙈" : "👁"}</button>` : "";
+    return `<div class="card sentc${x.temp ? " temp" : ""}${vi ? " veiled" : ""}" id="${battle ? "slot" + i : "d" + i}" data-di="${i}">${ticks}<div class="lab"><span>${editable ? `<span class="dh" data-dh="${i}">≡</span>` : ""}${vi ? "–" : ai + 1}. ${x.temp ? `<span class="tag" style="background:#6a4a9a">임시</span>` : sentTag(x)}</span>${editable ? `<span>${veilBtn}<button class="mini" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button><button class="mini" data-dn="${i}" ${i === r.deck.length - 1 ? "disabled" : ""}>▼</button></span>` : `<span class="cnt"></span>`}</div><div class="desc">${sentText(x)}</div></div>`; }).join("");
 }
 function bindDeckEdit(box, r, redraw){
+  box.querySelectorAll("button[data-veil]").forEach(b => b.onclick = () => { const u = +b.dataset.veil, V = r.veiled = r.veiled || [], k = V.indexOf(u); if (k >= 0) V.splice(k, 1); else { if (V.length >= relicFx(r).veil) V.shift(); V.push(u); } redraw(); });
   const mv = (i, j) => { const D = r.deck; if (j < 0 || j >= D.length || i === j) return; const [x] = D.splice(i, 1); D.splice(j, 0, x); redraw(); };
   box.querySelectorAll("button[data-up]").forEach(b => b.onclick = () => mv(+b.dataset.up, +b.dataset.up - 1));
   box.querySelectorAll("button[data-dn]").forEach(b => b.onclick = () => mv(+b.dataset.dn, +b.dataset.dn + 1));
@@ -2285,7 +2317,7 @@ function bindDeckEdit(box, r, redraw){
 }
 function openDeck(){   // 📜 덱 창: 언제든 확인, 전투 중이 아니면 순서 바꾸기
   const r = runState; if (!r) return; const ed = phase !== "battle";
-  openInfo(`📜 덱 · ${r.deck.length}개 · 한 바퀴 ${(cycleTime(r.deck.length) * gapMulOf(r)).toFixed(1)}초`, `${ed ? "" : `<div class="small">전투 중에는 순서를 바꿀 수 없어요</div>`}<div class="decklist">${deckListHtml(r, ed)}</div>`,
+  openInfo(`📜 덱 · ${r.deck.length}개 · 한 바퀴 ${(cycleTime(r.deck.length) * gapMulOf(r)).toFixed(1)}초`, `${ed ? "" : `<div class="small">전투 중에는 순서를 바꿀 수 없어요</div>`}<div class="decklist">${deckListHtml(r, ed, !ed)}</div>`,
     el => { if (ed) bindDeckEdit(el, r, () => { saveGame(phase === "prep" ? "prep" : "route"); const y = el.querySelector(".vbody").scrollTop; openDeck(); document.querySelector("#info .vbody").scrollTop = y; if (phase === "prep") refreshPrepLeft(); }); });
 }
 function refreshPrepLeft(){ const y = leftBody().parentElement.scrollTop; prepKeepInfo = true; renderPrep(); prepKeepInfo = false; leftBody().parentElement.scrollTop = y; }
@@ -2297,7 +2329,7 @@ function renderPrep(){
   const e = r.enc, title = r.encKind === "boss" ? "👑 보스" : r.encKind === "elite" ? "👹 정예" : (e.length > 1 ? `적 ${e.length}마리` : "적");
   updateHud(); if (!prepKeepInfo) closeInfo();
   const note = prepNote ? `<div class="note">${prepNote}</div>` : ""; prepNote = "";
-  const cyc = cycleTime(r.deck.length) * gapMulOf(r), b = deckBrief(r);
+  const cyc = cycleTime(activeDeck(r).length) * gapMulOf(r), b = deckBrief(r);
   leftBody().innerHTML = `<div class="sideh">📜 내 덱 · 문장 ${r.deck.length}개 · 한 바퀴 ${cyc.toFixed(1)}초~ ${verdictTag(b.verdict)}</div>${note}
     <div class="decklist">${deckListHtml(r, true)}</div>
     <button class="main" id="go">⚔ 전투 시작</button>`;
@@ -2417,7 +2449,7 @@ function startBattle(){
   const r = runState;
   pv = null; state = startFight(r); phase = "battle"; ended = false; acc = 0; last = performance.now(); skipBtn.disabled = false;
   paused = false; pauseBtn.disabled = false; pauseBtn.textContent = "⏸"; renderPotions();
-  leftBody().innerHTML = `<div class="sideh">📜 내 문장</div><div class="decklist">${deckListHtml(r, false)}</div>`;
+  leftBody().innerHTML = `<div class="sideh">📜 내 문장</div><div class="decklist">${deckListHtml(r, false, true)}</div>`;
   rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(state.balls.slice(1).map(k => k.cfg), state);
 }
 function updateBattleUi(){
