@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 29.6</title>
+<title>볼배틀 탑 - 데모 29.7</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -174,7 +174,7 @@ const effFloor = f => 1 + (relF(f) - 1) * (9 / (ACT_LEN - 1)) * STRETCH;   // �
 const absFloor = f => effFloor(f) + (actOf(f) - 1) * (1 + 9 * STRETCH);    // 전체 진행도 (골드 보상 등)
 const ACT_HP = 2.5, ACT_ATK = 1.6;   // 막이 올라갈 때마다 적 체력·공격력 배율 (밸런스용)
 const actMul = (f, m) => Math.pow(m, actOf(f) - 1);
-const POST_FIGHT_HEAL = 0.05;
+const POST_FIGHT_HEAL = 0;   // 전투 후 회복 없음 (사용자 결정, 유물 회복만)
 const FACE_UP = { hp: 3, atk: 1, def: 1, gap: 0.01 };
 const ROUTE_W = { normal: 50, elite: 20, rest: 30, treasure: 12, shop: 12, forge: 12, event: 24 };
 const DEV = !/[?&]release\b/.test(location.search);   // 개발자 모드: 주소 끝에 ?release를 붙이면 🛠 디버그 기능이 모두 숨겨짐 (출시판 확인용)
@@ -224,6 +224,7 @@ const SKILL = {
   freeze:   { label: "빙결",     desc: "상대를 2.5초간 크게 감속 + 냉기 +2", g: "방해", rar: 2 },
   shield:   { label: "보호막",    desc: "5초간 피해 18을 흡수", g: "보조", rar: 2 },
   heal:     { label: "회복",     desc: "체력 8 회복", g: "보조", rar: 2 },
+  heal5:    { label: "작은 회복", desc: "체력 5 회복", g: "보조", rar: 0, start: true },   // 시작 덱 전용 (보상에 안 나옴)
   atk:      { label: "공격력 증가", desc: "공격력 영구 +5%", g: "보조", rar: 2 },
   brew:     { label: "물약 제조", desc: "랜덤 물약 1개를 만듦 (전투당 6개까지 보관, 칸이 가득 차면 가장 오래된 물약을 마시고 받음, 그 뒤로는 만들자마자 마심)", g: "보조", rar: 1.5 },
   accel:    { label: "가속",       desc: "이동 속도 +15% (전투 동안 계속 쌓임, 최대 +180%)", g: "보조", rar: 2 },
@@ -724,6 +725,7 @@ const EFF = {
     if (me.id === 0 && s.hooks.grant && s.brewCount < BREW_KEEP){ let ok = s.hooks.grant(); if (!ok && s.hooks.drink && s.hooks.drink()) ok = s.hooks.grant(); if (ok){ s.brewCount++; if (s.pops.length < 30) s.pops.push({ x: me.x, y: me.y - me.R - 6, t: 0, txt: "🧪+1" }); if (s.depth < 3){ s.depth++; fire(s, me, "potget", {}); s.depth--; } } }
   },
   heal: (s, me, foe, ab) => { if (me.curseT > 0) return; me.hp = Math.min(me.maxHp, me.hp + Math.min(BIG, 8 * me.mod.heal.pow)); },
+  heal5: (s, me, foe, ab) => { if (me.curseT > 0) return; me.hp = Math.min(me.maxHp, me.hp + Math.min(BIG, 5 * me.mod.heal5.pow)); },
   atk: (s, me, foe, ab) => { me.atkBonus = Math.min(BIG, me.atkBonus + 0.05 * me.mod.atk.pow); }
 };
 
@@ -732,7 +734,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "29.6";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "29.7";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 0.5;
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -741,7 +743,7 @@ function abText(ab){   // 전투 능력 → 문장 글 (적 문장 표시용)
   return `${when} → ${SK_FULL(ab.eff)}`;
 }
 const ENTITY = { bomb: { exec: 0.6 }, zone: { exec: 0.6 }, hex: { exec: 0.8 }, judgment: { exec: 0.6 }, nova: { exec: 0.5 },
-  brew: { exec: 0.3 }, drink: { exec: 0.3 }, atk: { exec: 0.3 }, accel: { exec: 0.3 }, shield: { exec: 0.4 }, heal: { exec: 0.4 } };
+  brew: { exec: 0.3 }, drink: { exec: 0.3 }, atk: { exec: 0.3 }, accel: { exec: 0.3 }, shield: { exec: 0.4 }, heal: { exec: 0.4 }, heal5: { exec: 0.4 } };
 const entExec = sk => (ENTITY[sk] && ENTITY[sk].exec) || EXEC_T;
 const SPEEDY = ["shoot", "missile", "fireball", "frostbolt", "watergun", "needle", "boomerang", "dash"];   // 속도 법칙이 의미 있는 개체
 // 조건형 앞자리(조건). rar: 클수록 흔함 → 좋은 조건일수록 작게
@@ -756,6 +758,7 @@ const COND2 = {};
   ["c_stc", "상대에게 상태이상이 있을 때", "metric", { m: "stc", op: "ge", val: 1 }, 1], ["c_combo", "3연속 적중 중일 때", "metric", { m: "combo", op: "ge", val: 3 }, 2]
 ].forEach(([id, label, trig, tp, rar]) => COND2[id] = { id, label, trig, tp, rar });
 const LAWS = {   // 법칙형 뒷자리. apply(mod, x): x = 강화 배율(1, 1.5, 2)
+  l_pow10: { label: "위력 +10%", rar: 0, fits: () => true, apply: (m, x) => { m.pow += 0.1 * x * m.pow0; } },   // 시작 덱 전용
   l_pow1:  { label: "위력 +20%", rar: 3,   fits: () => true, apply: (m, x) => { m.pow += 0.2 * x * m.pow0; } },
   l_pow2:  { label: "위력 +40%", rar: 1.2, fits: () => true, apply: (m, x) => { m.pow += 0.4 * x * m.pow0; } },
   l_size:  { label: "크기 +25%", rar: 2.5, fits: sk => !!SKILL[sk].area, apply: (m, x) => { m.area *= 1 + 0.25 * x; } },
@@ -1222,7 +1225,7 @@ const FORMATIONS = {
   trio:   { label: "3마리", n: 3, hp: 0.4,  atk: 0.7, def: 0.8, from: 5, w: 2 },
   swarm:  { label: "4마리", n: 4, hp: 0.3,  atk: 0.5, def: 0.5, from: 6, w: 1 }
 };
-let ENEMY_HP0 = 60, ENEMY_HP_GROW = 1.08, ENEMY_ATK0 = 10, ENEMY_ATK_GROW = 1.03;   // 적 곡선 (밸런스 조절용)
+let ENEMY_HP0 = 45, ENEMY_HP_GROW = 1.08, ENEMY_ATK0 = 7, ENEMY_ATK_GROW = 1.03;   // 적 곡선 (밸런스 조절용)
 const EARLY = { 1: 0.5, 2: 0.65, 3: 0.8 };   // 초반 층 적 체력 배율 (공격력은 제곱근)
 const SPIKES = 0.5;   // 가시 갑옷: 돌진에 맞으면 그 피해의 30%를 돌진한 쪽에 되돌림
 const mkAb = (trig, tp, eff) => ({ kind: "cond", trig, tp, eff, act: "cast" });   // 적 문장도 조건형 문장 (순차 검사)
@@ -1284,7 +1287,7 @@ function newRun(seed){
   beginFloor(r, "normal");
   return r;
 }
-const START_DECK = [["cond", "c_t10", "spin"], ["cond", "c_t10", "shoot"], ["cond", "c_wall", "shoot"], ["cond", "c_start", "shield"], ["law", "spin", "l_size"]];
+const START_DECK = [["cond", "c_t10", "spin"], ["cond", "c_start", "shield"], ["cond", "c_start", "heal5"], ["cond", "c_start", "heal5"], ["law", "spin", "l_pow10"]];   // 일부러 약한 시작 덱
 // ===== 저장 =====  전투 준비·지도 화면에 들어갈 때마다 자동 저장 (브라우저 저장소, 이 기기·이 브라우저에만)
 const SAVE_KEY = "ballTowerSave2";
 function saveGame(where){ try { if (!runState) return; localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 2, where, r: runState }, (k, v) => k === "rng" ? undefined : v)); } catch (e) {} }
@@ -1302,7 +1305,7 @@ function enterFloor(r){
 const mkSlot = () => ({ w: null, v: null, c: null, t: null, a: null, lk: { w: false, v: false, c: false, t: false, a: false } });
 function addSentenceSlot(r){ if (r.decks[0].slots.length >= MAX_SLOTS) return false; for (const d of r.decks) d.slots.push(mkSlot()); r.slots = r.decks[r.deck].slots; return true; }   // 보스 보상: 모든 덱에 문장 칸 +1
 function rollSentType(r){ if (r.lastLaw){ r.lastLaw = false; return "cond"; } const t = r.rng() < 0.5 ? "law" : "cond"; r.lastLaw = t === "law"; return t; }
-function pickDistinct(list, w, n, rng){ const out = [], pool = list.slice(); while (out.length < n && pool.length){ const tot = pool.reduce((a, x) => a + w(x), 0); let x = rng() * tot, k = pool.length - 1; for (let i = 0; i < pool.length; i++){ x -= w(pool[i]); if (x <= 0){ k = i; break; } } out.push(pool.splice(k, 1)[0]); } return out; }
+function pickDistinct(list, w, n, rng){ const out = [], pool = list.filter(x => w(x) > 0);   /* 가중치 0은 아예 안 나옴 */ while (out.length < n && pool.length){ const tot = pool.reduce((a, x) => a + w(x), 0); let x = rng() * tot, k = pool.length - 1; for (let i = 0; i < pool.length; i++){ x -= w(pool[i]); if (x <= 0){ k = i; break; } } out.push(pool.splice(k, 1)[0]); } return out; }
 const usedSkills = r => [...new Set(r.deck.filter(x => x.type === "cond").map(x => x.suf))];
 // ===== 보상 조각 풀 =====
 // 상태이상·시너지 계열 조건: 2막부터, 그리고 지금 덱(조건형 문장의 스킬 속성)으로 그 상태이상·시너지가 가능할 때만 나옴
@@ -1830,7 +1833,7 @@ function botBattle(r, s){
   return s;
 }
 const condScore = id => 3.2 - COND2[id].rar, skillScore = sk => (SKILL[sk].g === "공격" ? 2 : 0.8) + (3 - SKILL[sk].rar) * 0.3;
-const LAW_SCORE = { l_twin: 4, l_pow2: 3, l_exec: 2.2, l_pow1: 2, l_speed: 1.2, l_size: 1.2 };
+const LAW_SCORE = { l_pow10: 1, l_twin: 4, l_pow2: 3, l_exec: 2.2, l_pow1: 2, l_speed: 1.2, l_size: 1.2 };
 function botReward(r, smart, rng){
   const type = rollSentType(r), best = (opts, sc) => smart ? opts.slice().sort((a, b) => sc(b) - sc(a))[0] : opts[Math.floor(rng() * opts.length)];
   const pres = prefixOpts(r, type), sufs = suffixOptsFor(r, type, pres);
@@ -2327,7 +2330,7 @@ function onBattleEnd(){
   if (w === 1){ phase = "over"; renderOver(false); return; }
   const wasFloor = r.floor, kind = r.encKind, res = winFloor(r, state, kind);
   updateHud();
-  const lines = [`💰 +${res.gold} · ✨ 경험치 +${res.xp} · ❤ ${res.heal} 회복`].concat(res.rolls.map(x => `🎲 Lv${x.lv} 달성! 주사위 ${x.faces.length}번 → <b>${x.faces.map(faceText).join(" · ")}</b>${x.extra ? `<br>🎲 행운의 주사위! 한 번 더 → <b>${faceText(x.extra)}</b>` : ""}`));
+  const lines = [`💰 +${res.gold} · ✨ 경험치 +${res.xp}${res.heal ? ` · ❤ +${res.heal}` : ""}`].concat(res.rolls.map(x => `🎲 Lv${x.lv} 달성! 주사위 ${x.faces.length}번 → <b>${x.faces.map(faceText).join(" · ")}</b>${x.extra ? `<br>🎲 행운의 주사위! 한 번 더 → <b>${faceText(x.extra)}</b>` : ""}`));
   if (res.potion) lines.push(res.potion.kept ? `🧪 물약 획득: <b>${POTION[res.potion.id].icon} ${POTION[res.potion.id].name}</b>` : `🧪 ${POTION[res.potion.id].name}을(를) 찾았지만 물약 칸이 가득 차서 버렸어요`);
   if (wasFloor === TOP_FLOOR){ phase = "over"; renderOver(true, lines); return; }
   if (isBossFloor(wasFloor)) lines.unshift(`👑 <b>${actOf(wasFloor)}막 보스 격파!</b> 문장 보상 + 희귀 유물 · ${actOf(r.floor)}막으로`);
