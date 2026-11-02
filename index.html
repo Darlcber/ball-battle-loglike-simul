@@ -99,7 +99,11 @@
   .evres{background:#232a3a;border:1px solid #4a6a9a;border-radius:8px;padding:10px;font-size:13px;line-height:1.7;white-space:pre-line}
   .mapcard{max-height:calc(100vh - 62px);overflow-y:auto;padding:4px}
   .rwgrid{display:flex;gap:6px;align-items:stretch}.rwcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}.rwarrow{align-self:center;font-size:22px;color:#ffe066}
-  .rwgrid .pick{padding:6px 9px}.rwgrid .pick b{font-size:14px}.rwgrid .pick .small{font-size:11px}
+  #panel.modal{background:rgba(5,7,15,.6);align-content:center}
+  .mbox{flex:0 0 auto !important;width:min(460px,92%);margin:auto;background:#1d2340;border:2px solid #6a74c0;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:7px;box-shadow:0 6px 24px rgba(0,0,0,.6)}
+  .mtitle{text-align:center;font-weight:bold;font-size:16px;color:#ffe066}
+  .rwopt{background:#2a3060;border:2px solid #5560a8;border-radius:8px;padding:7px 6px;font-size:13px;font-weight:bold;color:#eef;text-align:center;line-height:1.3}
+  .rwopt.sel{border-color:#ffe066;background:#3d3a20}.rwopt:disabled{opacity:.3}
   .rwbar{position:sticky;bottom:0;gap:6px;background:rgba(10,12,24,.96);padding-top:4px}
   .pick.sel{border-color:#ffe066;background:#3d3a20}.pick:disabled{opacity:.35}
   .routeg{display:flex;gap:8px;align-items:flex-start}.routeg > .mapcard{flex:1.2;min-width:0}.routeg > .rcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
@@ -196,7 +200,7 @@ const ROUTE_TYPES = ["normal", "elite", "rest", "treasure", "shop", "forge", "ev
 const MAP_HIDDEN_CHANCE = 0.25, MAP_EXTRA_EDGE = 0.35;   // 지도: 가려진(❓) 칸 확률, 길이 하나 더 갈라질 확률
 const ROUTE_ICON = { normal: "⚔", elite: "👹", rest: "🛏", treasure: "🎁", shop: "🛒", forge: "🔨", event: "📜", boss: "👑" };
 const ROUTE_LABEL = { normal: "⚔ 전투", elite: "👹 정예 전투", rest: "🛏 휴식", treasure: "🎁 보물상자", shop: "🛒 상점", forge: "🔨 대장간", event: "📜 이벤트" };
-const ROUTE_DESC = { normal: "적과 싸움(여러 마리일 수도). 블록 1개 보상", elite: "더 강한 적. 블록 1개 + 유물 1개 보상", rest: "회복하거나 주사위 칸을 강화", treasure: "유물 1개를 얻어요 (전투 없이 한 층을 지나감)", shop: "골드로 블록·유물·물약을 살 수 있어요", forge: "골드로 스킬·속성 규칙을 단련하거나, 고정된 블록의 봉인을 풀어요", event: "알 수 없는 이야기가 기다려요. 선택에 따라 보상이나 대가가 따라와요" };
+const ROUTE_DESC = { normal: "전투", elite: "정예 전투 · 유물", rest: "회복 · 주사위 강화", treasure: "유물", shop: "문장 · 유물 · 물약", forge: "문장 강화 · 지우기", event: "이벤트", boss: "보스" };
 const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 function fmt(n){ n = Math.max(0, n); if (n >= 1e9) return (n/1e9).toFixed(1)+"B"; if (n >= 1e6) return (n/1e6).toFixed(1)+"M"; if (n >= 1e3) return (n/1e3).toFixed(1)+"K"; return n >= 100 ? String(Math.round(n)) : n.toFixed(n >= 10 ? 0 : 1); }
 
@@ -1917,10 +1921,9 @@ function drawScene(c, st, preview){
   for (const p of st.pops){ c.globalAlpha = clamp(1 - p.t / 40, 0, 1); c.fillStyle = "#fff"; c.font = "bold 14px system-ui"; c.textAlign = "center"; c.fillText(p.txt, p.x, p.y - p.t * 0.6); c.globalAlpha = 1; }
   c.restore();
   if (preview){
-    c.fillStyle = "#ffe066"; c.font = "bold 14px system-ui"; c.textAlign = "center"; c.fillText(`👁 ${runState.floor}층 상대 미리보기`, W / 2, 20);
-    c.fillStyle = "#99a"; c.font = "11px system-ui"; c.fillText("적이 움직이고 스킬을 쓰는 모습이에요 · 탭하면 처음부터", W / 2, 36);
+    c.fillStyle = "#ffe066"; c.font = "bold 14px system-ui"; c.textAlign = "center"; c.fillText("미리보기", W / 2, 20);
     c.font = "11px system-ui";
-    for (const k of st.balls) if (!k.dead){ c.fillStyle = k.id === 0 ? "#9fc8ff" : "#fff"; c.fillText(k.id === 0 ? "🎯 나(미리보기용)" : `${k.icon} ${k.name}${k.weak.length ? " 약점" + attrIcons(k.weak) : ""}`, k.x, k.y + k.R + 14); }
+    for (const k of st.balls) if (!k.dead){ c.fillStyle = k.id === 0 ? "#9fc8ff" : "#fff"; c.fillText(k.id === 0 ? "나" : `${k.icon} ${k.name}${k.weak.length ? " 약점" + attrIcons(k.weak) : ""}`, k.x, k.y + k.R + 14); }
     return;
   }
   const P = st.balls[0], es = st.balls.slice(1), tot = es.reduce((a, e) => a + Math.max(0, e.hp), 0), totMax = es.reduce((a, e) => a + e.maxHp, 0), n = es.filter(e => !e.dead).length;
@@ -1940,7 +1943,7 @@ function draw(){
   ctx.clearRect(0, 0, W, H);
   if (state && phase !== "prep"){ drawScene(ctx, state, false); return; }
   if (phase === "prep" && pv){ drawScene(ctx, pv, true); return; }
-  ctx.fillStyle = "#889"; ctx.font = "16px system-ui"; ctx.textAlign = "center"; ctx.fillText("준비를 마치고 전투를 시작하세요", W / 2, H / 2);
+  ctx.fillStyle = "#889"; ctx.font = "16px system-ui"; ctx.textAlign = "center"; 
 }
 // 다음 상대 미리보기: 내 문장은 쓰지 않는 '허수아비' 상대로 실제 전투 엔진을 돌려 적의 움직임·스킬을 보여줌
 const DUMMY = { hp: 1e12, maxHp: 1e12, atk: 12, def: 0, minI: MIN_INTERVAL, abilities: [], fx: {}, spd: 0 };   // 미리보기의 '나'는 움직이지 않는 허수아비
@@ -1990,16 +1993,15 @@ function renderPotions(){
 }
 function attrHtml(){
   return `<details class="card"><summary><b>🧬 속성 규칙</b> <span class="small">(펼쳐서 보기)</span></summary>${ATTR_LIST.map(a => `<div class="small" style="margin-top:6px"><b>${ATTR[a].icon} ${ATTR[a].name}</b><br>${ATTR[a].rules.map(t => "• " + t).join("<br>")}</div>`).join("")}
-    <div class="small" style="margin-top:6px"><b>💥 속성 시너지</b> — [상태이상]에 걸린 상대에게 [속성 공격]이 맞으면 즉시 터져요 (내 공격만)<br>${SYN.map(y => `• ${synIcon(y)} <b>${y.name}</b> [${STATUS[y.a].name}${synNeed(y) > 1 ? ` ${synNeed(y)}중첩` : ""}]+[${ATTR[y.b].name} 공격]: ${y.desc}`).join("<br>")}<br>• 🍷 <b>핏자국</b>(유물 피의 성배) · 🦠 <b>전염</b>(유물 역병 주머니)</div>
-    <div class="small" style="margin-top:6px"><b>🧩 조건 조각</b><br>• 스킬·속성 블록은 <b>조건의 주체</b>로도 쓸 수 있어요: [🔥 불 속성 스킬]+[적중할 때], [빙결]+[걸릴 때], [속성 반응]+[일어날 때] …<br>• [🔥 속성 스킬 전체] 대상 블록은 동작 블록과 함께 그 속성 스킬 전부를 강화해요<br>• 대장간에서 속성 규칙을 단련할 수 있어요</div>
-    <div class="small" style="margin-top:6px"><b>⚔ 속성 상성</b> (왼쪽이 오른쪽을 이겨요)<br>${ATTR_CYCLE.concat(ATTR_CYCLE[0]).map(a => ATTR[a].icon + ATTR[a].name).join(" > ")}<br>• 적의 속성은 <b>쓰는 스킬의 속성</b>(많이 쓰는 최대 2개)이에요. 그 속성을 이기는 속성에 <b>약점</b>(피해 ×${WEAK_MUL}), 그 속성이 이기는 속성과 같은 속성에 <b>저항</b>(×${RESIST_MUL})이 생겨요. 속성이 없는 일반 스킬만 쓰는 적은 약점이 없어요.<br>• 규칙은 확률로 발동하고, 나중에 업그레이드할 수 있어요.</div></details>`;
+    <div class="small" style="margin-top:6px"><b>💥 시너지</b> [상태이상] + [속성 공격]<br>${SYN.map(y => `• ${synIcon(y)} <b>${y.name}</b> [${STATUS[y.a].name}${synNeed(y) > 1 ? ` ${synNeed(y)}중첩` : ""}]+[${ATTR[y.b].name} 공격]: ${y.desc}`).join("<br>")}<br>• 🍷 <b>핏자국</b>(유물 피의 성배) · 🦠 <b>전염</b>(유물 역병 주머니)</div>
+    <div class="small" style="margin-top:6px"><b>⚔ 상성</b> (왼쪽 > 오른쪽)<br>${ATTR_CYCLE.concat(ATTR_CYCLE[0]).map(a => ATTR[a].icon + ATTR[a].name).join(" > ")}<br>• 적의 속성은 <b>쓰는 스킬의 속성</b>(많이 쓰는 최대 2개)이에요. 그 속성을 이기는 속성에 <b>약점</b>(피해 ×${WEAK_MUL}), 그 속성이 이기는 속성과 같은 속성에 <b>저항</b>(×${RESIST_MUL})이 생겨요. 속성이 없는 일반 스킬만 쓰는 적은 약점이 없어요.<br>• 규칙은 확률로 발동하고, 나중에 업그레이드할 수 있어요.</div></details>`;
 }
 function relicHtml(r){
-  if (!r.relics.length) return `<div class="card"><b>🏺 유물</b><div class="small">아직 없어요 (정예 전투·보물상자에서 얻어요)</div></div>`;
+  if (!r.relics.length) return `<div class="card"><b>🏺 유물</b><div class="small">없음</div></div>`;
   return `<div class="card"><b>🏺 유물 ${r.relics.length}개</b>${r.relics.map(x => { const d = RELIC[x.id]; return `<div class="small">${d.icon} <b>${d.name}</b>${tierTag(d.tier)} — ${d.desc}${x.used ? " (사용됨)" : ""}</div>`; }).join("")}</div>`;
 }
 function potionHtml(r){
-  return `<div class="card"><b>🧪 물약 ${r.potions.length}/${potionSlotsOf(r)}</b>${r.potions.length ? r.potions.map((id, i) => `<div class="small">${POTION[id].icon} <b>${POTION[id].name}</b>${tierTag(POTION[id].tier)} — ${POTION[id].desc}<button class="mini" data-dp="${i}">버리기</button></div>`).join("") : `<div class="small">없음 (전투 후 일정 확률로 얻고, 전투 중 눌러서 써요)</div>`}</div>`;
+  return `<div class="card"><b>🧪 물약 ${r.potions.length}/${potionSlotsOf(r)}</b>${r.potions.length ? r.potions.map((id, i) => `<div class="small">${POTION[id].icon} <b>${POTION[id].name}</b>${tierTag(POTION[id].tier)} — ${POTION[id].desc}<button class="mini" data-dp="${i}">버리기</button></div>`).join("") : `<div class="small">없음</div>`}</div>`;
 }
 // 보유 블록: [이 덱에서 쓰지 않은 블록](끌어서 배치) / [전부 보유] 두 가지 보기
 function inventoryHtml(r){
@@ -2073,11 +2075,11 @@ function deckAttrHtml(r){
   const react = [];
   for (const y of SYN) if (cnt[STATUS[y.a].src] && cnt[y.b]) react.push(`${synIcon(y)} ${y.name}`);
   const bonus = []; if (fx.attrAll) bonus.push(`프리즘/가면 +${Math.round(fx.attrAll * 100)}%p`);
-  const body = !casts.length ? `<div class="small">이 덱에는 발동하는 스킬 문장이 없어요</div>` : `
-    <div class="small"><b>속성 구성</b> ${attrs.length ? attrs.map(a => `${ATTR[a].icon}${ATTR[a].name}×${cnt[a]}`).join(" ") : "일반 스킬뿐이라 속성 규칙이 발동하지 않아요"}${bonus.length ? ` <span style="color:#ffe066">(${bonus.join(", ")})</span>` : ""}</div>
+  const body = !casts.length ? `<div class="small">-</div>` : `
+    <div class="small"><b>속성 구성</b> ${attrs.length ? attrs.map(a => `${ATTR[a].icon}${ATTR[a].name}×${cnt[a]}`).join(" ") : "-"}${bonus.length ? ` <span style="color:#ffe066">(${bonus.join(", ")})</span>` : ""}</div>
     ${attrs.map(a => `<div class="small">• ${ATTR[a].icon} ${ruleText[a]()}${r.attrUp[a] ? ` · 단련 ${r.attrUp[a]}단계` : ""}</div>`).join("")}
-    ${react.length ? `<div class="small"><b>일어날 수 있는 반응</b> ${react.join(" · ")}</div>` : (attrs.length ? `<div class="small" style="color:#99a">이 덱의 속성 조합으로는 시너지가 일어나지 않아요</div>` : "")}
-    <div class="small" style="margin-top:4px"><b>이번 적에 대한 피해 배율</b></div>
+    ${react.length ? `<div class="small"><b>시너지</b> ${react.join(" · ")}</div>` : ""}
+    <div class="small" style="margin-top:4px"><b>상성</b></div>
     ${casts.map(x => `<div class="small">• 문장 ${x.i + 1} ${SK_FULL(x.ab.eff)} → ${r.enc.map(e => { const m = dmgMult(x.ab.eff, e), tag = m > 1 ? "약점 ×" + m : m < 1 ? "저항 ×" + m : "×1"; return `${e.icon}${tag}`; }).join(" ")}</div>`).join("")}
     ${enh.length ? `<div class="small" style="margin-top:4px"><b>법칙</b> ${enh.map(x => `${x.i + 1}. ${sentText(x.x)}`).join(" / ")}</div>` : ""}`;
   return `<details class="card"><summary><b>🧬 덱 속성 분석</b></summary>${body}</details>`;
@@ -2099,9 +2101,8 @@ function renderPrep(){
   const cyc = r.deck.length * SCAN_T * gapMulOf(r), b = deckBrief(r);
   leftBody().innerHTML = `<div class="sideh">📜 내 덱 · 문장 ${r.deck.length}개 · 한 바퀴 ${cyc.toFixed(1)}초~ ${verdictTag(b.verdict)}</div>${note}
     ${r.deck.map((x, i) => `<div class="card sentc" id="slot${i}"><div class="lab"><span>${i + 1}. ${sentTag(x)}</span><span><button class="mini" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button><button class="mini" data-dn="${i}" ${i === r.deck.length - 1 ? "disabled" : ""}>▼</button></span></div><div class="desc">${sentText(x)}</div></div>`).join("")}
-    <div class="small">문장을 1번부터 차례로 ${+(SCAN_T * gapMulOf(r)).toFixed(2)}초씩 검사해요. 조건이 맞으면 실행(그동안 검사 멈춤). 법칙형도 검사 시간을 차지해요.</div>
     <button class="main" id="go">⚔ 전투 시작</button>`;
-  rightEl().innerHTML = `<div class="sideh">${actOf(r.floor)}막 ${r.floor}층 · ${title}</div>${enemyCards(e)}<div class="small">가운데 화면에서 상대 움직임을 미리 볼 수 있어요 (탭하면 처음부터)</div>`;
+  rightEl().innerHTML = `<div class="sideh">${actOf(r.floor)}막 ${r.floor}층 · ${title}</div>${enemyCards(e)}`;
   const mv = (i, d) => { const D = r.deck, j = i + d; if (j < 0 || j >= D.length) return; [D[i], D[j]] = [D[j], D[i]]; const y = leftBody().parentElement.scrollTop; renderPrep(); leftBody().parentElement.scrollTop = y; };
   document.querySelectorAll("#leftBody button[data-up]").forEach(b => b.onclick = () => mv(Number(b.dataset.up), -1));
   document.querySelectorAll("#leftBody button[data-dn]").forEach(b => b.onclick = () => mv(Number(b.dataset.dn), 1));
@@ -2219,7 +2220,7 @@ function startBattle(){
   const r = runState;
   pv = null; state = startFight(r); phase = "battle"; ended = false; acc = 0; last = performance.now(); skipBtn.disabled = false;
   paused = false; pauseBtn.disabled = false; pauseBtn.textContent = "⏸"; renderPotions();
-  leftBody().innerHTML = `<div class="sideh">📜 내 문장 (노랑 = 검사 중, 초록 = 실행 중)</div>` + r.deck.map((x, i) => `<div class="card sentc" id="slot${i}"><div class="lab"><span>${i + 1}. ${sentTag(x)}</span><span class="cnt"></span></div><div class="desc">${sentText(x)}</div></div>`).join("");
+  leftBody().innerHTML = `<div class="sideh">📜 내 문장</div>` + r.deck.map((x, i) => `<div class="card sentc" id="slot${i}"><div class="lab"><span>${i + 1}. ${sentTag(x)}</span><span class="cnt"></span></div><div class="desc">${sentText(x)}</div></div>`).join("");
   rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(r.enc, state);
 }
 function updateBattleUi(){
@@ -2252,27 +2253,23 @@ function renderReward(lines){
   if (r.rw && !r.rw.pres) r.rw = null;   // 옛 저장 형식
   if (!r.rw){ const type = rollSentType(r), pres = prefixOpts(r, type); r.rw = { type, pres, sufs: suffixOptsFor(r, type, pres), pre: null, suf: null }; }
   const w = r.rw, law = w.type === "law";
-  const typeName = law ? "📜 법칙형 — [개체] = [특징]" : "⚙ 조건형 — [조건] → [스킬]";
   const ok = w.pre != null && w.suf != null && sentFits(w.type, w.pre, w.suf);
-  const full = ok ? (law ? `${SK_FULL(w.pre)} = ${LAWS[w.suf].label}` : `${COND2[w.pre].label} → ${SK_FULL(w.suf)}`) : "";
-  const col = (title, list, side) => `<div class="rwcol"><div class="small" style="color:#ffe066">${title}</div>${list.map((id, i) => {
+  const col = (list, side) => `<div class="rwcol">${list.map((id, i) => {
     const sel = side === "L" ? w.pre === id : w.suf === id, bad = side === "R" && w.pre != null && !sentFits(w.type, w.pre, id);
-    const desc = side === "L" ? (law ? SKILL[id].desc : "") : (law ? (bad ? "이 개체엔 안 맞아요" : "") : SKILL[id].desc);
-    return `<button class="pick${sel ? " sel" : ""}" data-${side}="${i}" ${bad ? "disabled" : ""}><b>${side === "L" ? preLabel(w.type, id) : sufLabel(w.type, id)}</b>${desc ? `<span class="small">${desc}</span>` : ""}</button>`; }).join("")}</div>`;
-  panel.innerHTML = `<div class="msg" style="padding:5px 8px">${lines.join("<br>")}</div><div class="small"><b style="color:#fff;font-size:14px">보상 문장: ${typeName}</b> · 왼쪽과 오른쪽에서 하나씩 골라요</div>
-    <div class="rwgrid">${col(law ? "개체(스킬)" : "조건", w.pres, "L")}<div class="rwarrow">${law ? "=" : "→"}</div>${col(law ? "특징" : "실행할 스킬", w.sufs, "R")}</div>
-    <div class="row rwbar"><button class="main" id="rtake" ${ok ? "" : "disabled"} style="flex:2">${ok ? "받기: " + full : "양쪽에서 하나씩 고르세요"}</button><button class="mini" id="rskip" style="flex:1">건너뛰기</button></div>`;
+    return `<button class="rwopt${sel ? " sel" : ""}" data-${side}="${i}" ${bad ? "disabled" : ""}>${side === "L" ? preLabel(w.type, id) : sufLabel(w.type, id)}</button>`; }).join("")}</div>`;
+  panel.innerHTML = `<div class="mbox"><div class="mtitle">보상 · ${law ? "법칙" : "조건"}</div><div class="small" style="text-align:center">${lines.join("<br>")}</div>
+    <div class="rwgrid">${col(w.pres, "L")}<div class="rwarrow">${law ? "=" : "→"}</div>${col(w.sufs, "R")}</div>
+    <div class="row" style="gap:6px"><button class="main" id="rtake" ${ok ? "" : "disabled"} style="flex:2;padding:8px;font-size:14px">받기</button><button class="mini" id="rskip" style="flex:1">건너뛰기</button></div></div>`;
   const done = () => { r.rw = null; if (r.encKind === "elite" || r.encKind === "boss") renderRelicGain(grantRelic(r, r.encKind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
-  const keep = () => { const y = panel.scrollTop; renderReward(lines); panel.scrollTop = y; };
-  panel.querySelectorAll(".pick[data-l]").forEach(b => b.onclick = () => { w.pre = w.pres[+b.dataset.l]; if (w.suf != null && !sentFits(w.type, w.pre, w.suf)) w.suf = null; keep(); });
-  panel.querySelectorAll(".pick[data-r]").forEach(b => b.onclick = () => { w.suf = w.sufs[+b.dataset.r]; keep(); });
+  panel.querySelectorAll(".rwopt[data-l]").forEach(b => b.onclick = () => { w.pre = w.pres[+b.dataset.l]; if (w.suf != null && !sentFits(w.type, w.pre, w.suf)) w.suf = null; renderReward(lines); });
+  panel.querySelectorAll(".rwopt[data-r]").forEach(b => b.onclick = () => { w.suf = w.sufs[+b.dataset.r]; renderReward(lines); });
   document.getElementById("rtake").onclick = () => { if (!ok) return; r.deck.push(mkSent(r, w.type, w.pre, w.suf)); done(); };
-  document.getElementById("rskip").onclick = done;   // 건너뛰기: 아무것도 받지 않음
+  document.getElementById("rskip").onclick = done;
 }
 function renderRelicGain(id, next){
   phase = "relic"; updateHud();
   const d = id ? RELIC[id] : null;
-  panel.innerHTML = `<div class="msg">${d ? `🏺 <b>유물 획득!</b><br><span style="font-size:20px">${d.icon}</span> <b>${d.name}</b> ${tierTag(d.tier)}<br>${d.desc}` : "더 얻을 유물이 없어요"}</div><button class="main" id="rn">계속</button>`;
+  panel.innerHTML = `<div class="mbox"><div class="mtitle">유물</div><div style="text-align:center">${d ? `<span style="font-size:28px">${d.icon}</span><br><b>${d.name}</b> ${tierTag(d.tier)}<div class="small">${d.desc}</div>` : "없음"}</div><button class="main" id="rn" style="padding:8px;font-size:14px">계속</button></div>`;
   document.getElementById("rn").onclick = next;
 }
 function goNext(){ if (enterFloor(runState)) renderRoute(); else renderPrep(); }
@@ -2292,14 +2289,14 @@ function renderRoute(){
   if (!r.map) r.map = genMap(r);
   const ch = mapChoices(r); if (mapSel && !ch.some(o => o.row === mapSel.row && o.col === mapSel.col)) mapSel = null;
   const so = mapSel && ch.find(o => o.row === mapSel.row && o.col === mapSel.col);
-  panel.innerHTML = `<div class="routeg"><div class="card mapcard" id="mapbox">${mapSvg(r, mapSel)}</div><div class="rcol"><div class="msg" style="background:#232a4a;border-color:#4a5290">🗺 ${r.floor}층으로 갈 곳을 지도에서 고르세요 — 초록으로 빛나는 칸이 지금 갈 수 있는 곳이에요${debugRoutes ? " · 🛠디버그: 그 층 아무 칸이나, ❓ 공개" : ""}</div>
-    <div class="card" id="mapinfo">${so ? `<b>${so.hidden ? "❓ 알 수 없음" : ROUTE_LABEL[so.type]}</b> <span class="small">(${so.row + 2}층)</span><div class="small">${so.hidden ? "가보기 전에는 무엇인지 알 수 없어요" : ROUTE_DESC[so.type]}</div><button class="main" id="mapgo" style="margin-top:6px">여기로 가기</button>` : `<div class="small">칸을 한 번 탭하면 설명, <b>같은 칸을 한 번 더 탭하면 바로 이동</b>해요. ${Object.entries(ROUTE_ICON).map(([k, v]) => `${v}${k === "boss" ? "보스" : ROUTE_LABEL[k].replace(/^\S+\s/, "")}`).join(" · ")} · ❓가려진 칸</div>`}</div>` +
+  panel.innerHTML = `<div class="routeg"><div class="card mapcard" id="mapbox">${mapSvg(r, mapSel)}</div><div class="rcol"><div class="msg" style="background:#232a4a;border-color:#4a5290">🗺 ${actOf(r.floor)}막 ${r.floor}층${debugRoutes ? " · 🛠 전체 길" : ""}</div>
+    <div class="card" id="mapinfo">${so ? `<b>${so.hidden ? "❓ 알 수 없음" : ROUTE_LABEL[so.type]}</b> <span class="small">(${so.row + 2}층)</span><div class="small">${so.hidden ? "?" : ROUTE_DESC[so.type]}</div><button class="main" id="mapgo" style="margin-top:6px">이동</button>` : `<div class="small">${Object.entries(ROUTE_ICON).map(([k, v]) => `${v}${k === "boss" ? "보스" : ROUTE_LABEL[k].replace(/^\S+\s/, "")}`).join(" · ")} · ❓가려진 칸</div>`}</div>` +
     (debugRoutes ? `<details class="card"><summary><b>🛠 아무 종류로 가기</b></summary>${ROUTE_TYPES.map(t => `<button class="pick" data-dt="${t}" style="margin-top:4px;padding:6px 10px"><b style="font-size:13px">${ROUTE_LABEL[t]}</b></button>`).join("")}</details><details class="card"><summary><b>🛠 이벤트 골라 보기</b> <span class="small">(${EVENTS.length}종)</span></summary>${EVENTS.map(e => `<button class="pick" data-ev="${e.id}" style="margin-top:4px;padding:6px 10px"><b style="font-size:13px">${e.title}</b><span class="small">${e.id}${e.ok && !e.ok(r) ? " · 조건 미충족" : ""}</span></button>`).join("")}</details>` : "") + `</div></div>`;
   panel.querySelectorAll(".mnode[data-row]").forEach(g => g.onclick = () => { const row = +g.dataset.row, col = +g.dataset.col; if (mapSel && mapSel.row === row && mapSel.col === col){ const o = ch.find(x => x.row === row && x.col === col); if (o){ mapSel = null; takeNode(r, o); r.routes = [o]; chooseRoute(0); return; } } mapSel = { row, col }; const y = document.getElementById("mapbox").scrollTop; renderRoute(); document.getElementById("mapbox").scrollTop = y; });
   const go = document.getElementById("mapgo"); if (go) go.onclick = () => { const o = so; mapSel = null; takeNode(r, o); r.routes = [o]; chooseRoute(0); };
   panel.querySelectorAll(".pick[data-dt]").forEach(b => b.onclick = () => { const o = ch[0]; if (o) takeNode(r, o); r.routes = [{ type: b.dataset.dt, hidden: false }]; chooseRoute(0); });
   panel.querySelectorAll(".pick[data-ev]").forEach(b => b.onclick = () => { const o = ch[0]; if (o) takeNode(r, o); r.routes = null; renderEvent(eventById(b.dataset.ev), eventById(b.dataset.ev), false); });
-  panel.className = "on";
+  panel.classList.add("on");
   if (!mapSel){ const box = document.getElementById("mapbox"), av = box.querySelector("circle.av"); if (av) box.scrollTop = Math.max(0, av.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - box.clientHeight * 0.55); }
 }
 function chooseRoute(i){
@@ -2336,32 +2333,32 @@ function renderEventResult(ev, res, wasHidden){
 function finishEvent(){ const r = runState; r.floor++; updateHud(); if (r.pendingCopies > 0) renderCopy(); else goNext(); }
 function renderRest(wasHidden){
   phase = "rest"; const r = runState;
-  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🛏 ${wasHidden ? "❓의 정체는 휴식이었어요! " : ""}${r.floor}층 휴식 · 하나를 고르세요 (HP ${fmt(r.hp)}/${fmt(r.maxHp)})</div>
-    <button class="pick" id="r1"><b>🛏 푹 쉬기</b><span class="small">체력을 전부 회복</span></button>
-    <button class="pick" id="r2"><b>🛏🎲 휴식 + 강화</b><span class="small">체력 30% 회복, 주사위 칸 2개 강화</span></button>
-    <button class="pick" id="r3"><b>🎲 훈련</b><span class="small">체력 회복 없음, 주사위 칸 4개 강화</span></button>`;
+  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🛏 휴식 · ❤${fmt(r.hp)}/${fmt(r.maxHp)}</div>
+    <button class="pick" id="r1"><b>🛏 쉬기</b><span class="small">체력 전부 회복</span></button>
+    <button class="pick" id="r2"><b>🛏🎲 쉬기 + 강화</b><span class="small">체력 30% · 주사위 2칸</span></button>
+    <button class="pick" id="r3"><b>🎲 훈련</b><span class="small">주사위 4칸</span></button>`;
   document.getElementById("r1").onclick = () => { r.hp = r.maxHp; finishRest("체력을 전부 회복했어요"); };
   document.getElementById("r2").onclick = () => { restHeal(r, 0.3); renderFacePick(2); };
   document.getElementById("r3").onclick = () => renderFacePick(4);
 }
 function itemName(it){ return it.type === "sent" ? `${sentText(it.sent)}` : it.type === "remove" ? "✂ 문장 하나 지우기" : it.type === "block" ? `${it.ids.map(id => `${bname(id)}${tierOfBlock(id) ? tierTag(tierOfBlock(id)) : ""}`).join(" + ")} <span class="small">(${it.ids.length > 1 ? "세트" : KIND_LABEL[BLK[it.ids[0]].k]})</span>` : it.type === "relic" ? `${RELIC[it.id].icon} ${RELIC[it.id].name}${tierTag(RELIC[it.id].tier)}` : `${POTION[it.id].icon} ${POTION[it.id].name}${tierTag(POTION[it.id].tier)}`; }
-function itemDesc(it){ return it.type === "sent" ? (it.sent.type === "law" ? "법칙형 문장" : "조건형 문장") + " · 덱 맨 뒤에 들어가요" : it.type === "remove" ? "덱에서 문장 하나를 골라 지워요 (지울 때마다 비용 +25)" : it.type === "block" ? offerDesc(it.ids) : it.type === "relic" ? RELIC[it.id].desc : POTION[it.id].desc; }
+function itemDesc(it){ return it.type === "sent" ? "" : it.type === "remove" ? "" : it.type === "block" ? offerDesc(it.ids) : it.type === "relic" ? RELIC[it.id].desc : POTION[it.id].desc; }
 function renderShop(wasHidden, note){
   phase = "shop"; const r = runState; updateHud();
   const lab = { block: "🧱 블록", sent: "📜 문장", remove: "✂ 지우기", relic: "🏺 유물", potion: "🧪 물약" };
   r.shop.forEach(it => { if (it.type === "remove" && !it.sold) it.price = removeCost(r); });
-  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🛒 ${wasHidden ? "❓의 정체는 상점이었어요! " : ""}상점 · 💰${r.gold}${note ? `<br><b>${note}</b>` : ""}</div>` +
-    r.shop.map((it, i) => `<button class="pick" data-i="${i}" ${it.sold ? "disabled" : ""}><span class="tag d">${lab[it.type]}</span><b>${itemName(it)}</b><span class="small">${itemDesc(it)}</span><span class="small" style="color:#ffe066">${it.sold ? "판매 완료" : "💰 " + it.price}</span></button>`).join("") +
-    `<button class="main" id="lv">상점에서 나가기</button>`;
+  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🛒 상점 · 💰${r.gold}${note ? `<br><b>${note}</b>` : ""}</div>` +
+    r.shop.map((it, i) => `<button class="pick" data-i="${i}" ${it.sold ? "disabled" : ""}><span class="tag d">${lab[it.type]}</span><b>${itemName(it)}</b>${itemDesc(it) ? `<span class="small">${itemDesc(it)}</span>` : ""}<span class="small" style="color:#ffe066">${it.sold ? "판매 완료" : "💰 " + it.price}</span></button>`).join("") +
+    `<button class="main" id="lv">나가기</button>`;
   panel.querySelectorAll(".pick").forEach(b => b.onclick = () => { const it = r.shop[Number(b.dataset.i)];
-    if (it.type === "remove"){ if (r.gold < it.price) return renderShop(wasHidden, "골드가 부족해요"); return renderPickSent("✂ 지울 문장을 고르세요 (💰" + it.price + ")", i => { const e = removeSent(r, i); if (!e){ r.gold -= it.price; it.sold = true; } renderShop(wasHidden, e || "문장을 지웠어요"); }, () => renderShop(wasHidden)); }
-    const e = buyItem(r, it); renderShop(wasHidden, e || "구매했어요!"); });
+    if (it.type === "remove"){ if (r.gold < it.price) return renderShop(wasHidden, "골드가 부족해요"); return renderPickSent("✂ 지우기 (💰" + it.price + ")", i => { const e = removeSent(r, i); if (!e){ r.gold -= it.price; it.sold = true; } renderShop(wasHidden, e || "문장을 지웠어요"); }, () => renderShop(wasHidden)); }
+    const e = buyItem(r, it); renderShop(wasHidden, e || ""); });
   document.getElementById("lv").onclick = () => finishRest("상점을 나왔어요");
 }
 // 덱의 문장 하나를 고르는 화면 (지우기·강화 등)
 function renderPickSent(title, onPick, onBack, filter){
   const r = runState;
-  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">${title}</div>` + r.deck.map((x, i) => (!filter || filter(x)) ? `<button class="pick" data-si="${i}">${sentTag(x)}<b>${i + 1}. ${sentText(x)}</b></button>` : "").join("") + `<button class="main" id="pback">돌아가기</button>`;
+  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">${title}</div>` + r.deck.map((x, i) => (!filter || filter(x)) ? `<button class="pick" data-si="${i}">${sentTag(x)}<b>${i + 1}. ${sentText(x)}</b></button>` : "").join("") + `<button class="main" id="pback">뒤로</button>`;
   panel.querySelectorAll(".pick[data-si]").forEach(b => b.onclick = () => onPick(Number(b.dataset.si)));
   document.getElementById("pback").onclick = onBack;
 }
@@ -2369,16 +2366,16 @@ function upSent(r, i){ const x = r.deck[i]; if (!x || (x.lv || 0) >= SENT_MAX_LV
 const sentUpText = x => x.type === "law" ? "법칙 효과 +50%" : "그 문장의 위력 +30%";
 function renderForge(wasHidden, note){
   phase = "forge"; const r = runState; updateHud();
-  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🔨 ${wasHidden ? "❓의 정체는 대장간이었어요! " : ""}대장간 · 💰${r.gold}<br><span class="small">문장을 강화(최대 ★${SENT_MAX_LV})하거나 지울 수 있어요</span>${note ? `<br><b>${note}</b>` : ""}</div>` +
+  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🔨 대장간 · 💰${r.gold}${note ? `<br><b>${note}</b>` : ""}</div>` +
     r.deck.map((x, i) => { const lv = x.lv || 0, max = lv >= SENT_MAX_LV;
-      return `<button class="pick" data-su="${i}" ${max ? "disabled" : ""}>${sentTag(x)}<b>${i + 1}. ${sentText(x)}</b><span class="small">${max ? "최대 단계" : `강화 → ★${lv + 1}: ${sentUpText(x)}`}</span><span class="small" style="color:#ffe066">${max ? "" : "💰 " + sentUpCost(lv)}</span></button>`; }).join("") +
-    `<button class="pick" id="fremove"><b>✂ 문장 하나 지우기</b><span class="small">덱이 가벼울수록 좋은 문장이 자주 돌아와요</span><span class="small" style="color:#ffe066">💰 ${removeCost(r)}</span></button>` +
-    `<div class="msg" style="background:#232a4a;border-color:#4a5290">🧬 속성 단련 — 속성 규칙의 확률과 지속시간을 키워요 (그 속성 스킬을 쓰는 모든 문장에 적용)</div>` +
+      return `<button class="pick" data-su="${i}" ${max ? "disabled" : ""}>${sentTag(x)}<b>${i + 1}. ${sentText(x)}</b><span class="small">${max ? "최대" : `★${lv + 1}: ${sentUpText(x)}`}</span><span class="small" style="color:#ffe066">${max ? "" : "💰 " + sentUpCost(lv)}</span></button>`; }).join("") +
+    `<button class="pick" id="fremove"><b>✂ 문장 지우기</b><span class="small" style="color:#ffe066">💰 ${removeCost(r)}</span></button>` +
+    `<div class="msg" style="background:#232a4a;border-color:#4a5290">🧬 속성 단련</div>` +
     UP_ATTRS.map(a => { const lv = r.attrUp[a] || 0, max = lv >= ATTR_UP_MAX;
-      return `<button class="pick" data-au="${a}" ${max ? "disabled" : ""}><b>${ATTR[a].icon} ${ATTR[a].name} · ${lv}단계</b><span class="small">지금: ${lv ? ATTR_UP_TEXT[a](lv) : "단련 없음"}${max ? " (최대)" : ` → 다음: ${ATTR_UP_TEXT[a](lv + 1)}`}</span><span class="small" style="color:#ffe066">${max ? "" : "💰 " + attrUpCost(lv)}</span></button>`; }).join("") +
-    `<button class="main" id="lv">대장간에서 나가기</button>`;
+      return `<button class="pick" data-au="${a}" ${max ? "disabled" : ""}><b>${ATTR[a].icon} ${ATTR[a].name} · ${lv}단계</b><span class="small">${lv ? ATTR_UP_TEXT[a](lv) : "-"}${max ? " (최대)" : ` → ${ATTR_UP_TEXT[a](lv + 1)}`}</span><span class="small" style="color:#ffe066">${max ? "" : "💰 " + attrUpCost(lv)}</span></button>`; }).join("") +
+    `<button class="main" id="lv">나가기</button>`;
   panel.querySelectorAll(".pick[data-su]").forEach(b => b.onclick = () => { const e = upSent(r, Number(b.dataset.su)); renderForge(wasHidden, e || "문장 강화!"); });
-  document.getElementById("fremove").onclick = () => { if (r.gold < removeCost(r)) return renderForge(wasHidden, "골드가 부족해요"); renderPickSent(`✂ 지울 문장을 고르세요 (💰${removeCost(r)})`, i => { const c = removeCost(r), e = removeSent(r, i); if (!e) r.gold -= c; renderForge(wasHidden, e || "문장을 지웠어요"); }, () => renderForge(wasHidden)); };
+  document.getElementById("fremove").onclick = () => { if (r.gold < removeCost(r)) return renderForge(wasHidden, "골드가 부족해요"); renderPickSent(`✂ 지우기 (💰${removeCost(r)})`, i => { const c = removeCost(r), e = removeSent(r, i); if (!e) r.gold -= c; renderForge(wasHidden, e || "문장을 지웠어요"); }, () => renderForge(wasHidden)); };
   panel.querySelectorAll(".pick[data-au]").forEach(b => b.onclick = () => { const e = forgeAttrUp(r, b.dataset.au); renderForge(wasHidden, e || `${ATTR[b.dataset.au].name} 규칙 단련!`); });
   document.getElementById("lv").onclick = () => finishRest("대장간을 나왔어요");
 }
@@ -2387,9 +2384,9 @@ function renderFacePick(n){
   const r = runState, sel = new Set();
   const draw2 = () => {
     updateHud();
-    panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🎲 강화할 주사위 칸을 ${n}개 고르세요 (${sel.size}/${n})<br><span class="small">강화: 체력 +${FACE_UP.hp} / 공격력 +${FACE_UP.atk} / 방어력 +${FACE_UP.def} / 최소 간격 -${FACE_UP.gap}초 (선택한 칸의 수치)</span></div>
+    panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">🎲 주사위 강화 ${sel.size}/${n}</div>
       <div class="facegrid">${r.dice.map((f, i) => `<button class="face ${sel.has(i) ? "on" : ""}" data-i="${i}">${faceShort(f)}${sel.has(i) ? `<small>→${faceShort({ s: f.s, v: Math.round((f.v + FACE_UP[f.s]) * 100) / 100 })}</small>` : ""}</button>`).join("")}</div>
-      <button class="main" id="fc" ${sel.size === n ? "" : "disabled"}>강화 확정</button>`;
+      <button class="main" id="fc" ${sel.size === n ? "" : "disabled"}>확정</button>`;
     panel.querySelectorAll(".face").forEach(b => b.onclick = () => { const i = Number(b.dataset.i); if (sel.has(i)) sel.delete(i); else if (sel.size < n) sel.add(i); draw2(); });
     document.getElementById("fc").onclick = () => { sel.forEach(i => upgradeFace(r, i)); finishRest(`주사위 ${n}칸을 강화했어요`); };
   };
@@ -2411,7 +2408,7 @@ function renderOver(cleared, lines){
 function newGame(){ clearSave(); runState = newRun(Math.floor(Math.random() * 1e6)); state = null; mapSel = null; renderRoute(); }   // 1층부터 지도에서 시작점을 고름
 
 function loop(now){
-  { const on = phase === "prep" || phase === "battle" ? "" : "on"; if (panel.className !== on){ panel.className = on; panel.scrollTop = 0; } if (loop.ph !== phase){ loop.ph = phase; panel.scrollTop = 0; } }
+  { const on = phase !== "prep" && phase !== "battle"; if (panel.classList.contains("on") !== on){ panel.classList.toggle("on", on); panel.scrollTop = 0; } if (loop.ph !== phase){ loop.ph = phase; panel.scrollTop = 0; panel.classList.toggle("modal", phase === "reward" || phase === "relic"); } }
   if (state && phase === "battle" && !paused){
     acc += Math.min(100, now - last) * speed;
     while (acc >= 1000 / 60){ step(state); acc -= 1000 / 60; for (const p of state.pops) p.t++; }
@@ -2521,8 +2518,8 @@ document.getElementById("vaultBtn").onclick = () => { if (!runState) return; vau
 speedBtn.onclick = () => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; speedBtn.textContent = speed + "배속"; };
 
 window.botRun = botRun; window.newRun = newRun;
-{ const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층에서 이어서 시작했어요 (처음부터 하려면 [🔄 새 게임])`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
-{ const b = document.getElementById("newRunBtn"); let armed = 0; b.onclick = () => { if (Date.now() - armed < 3000){ armed = 0; b.textContent = "🔄"; if (typeof dbgReset === "function") dbgReset(); newGame(); return; } armed = Date.now(); b.textContent = "정말 새로 시작? 한 번 더"; setTimeout(() => { if (armed && Date.now() - armed >= 3000){ armed = 0; b.textContent = "🔄"; } }, 3100); }; }
+{ const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
+{ const b = document.getElementById("newRunBtn"); let armed = 0; b.onclick = () => { if (Date.now() - armed < 3000){ armed = 0; b.textContent = "🔄"; if (typeof dbgReset === "function") dbgReset(); newGame(); return; } armed = Date.now(); b.textContent = "🔄 한 번 더"; setTimeout(() => { if (armed && Date.now() - armed >= 3000){ armed = 0; b.textContent = "🔄"; } }, 3100); }; }
 requestAnimationFrame(loop);
 </script>
 </body>
