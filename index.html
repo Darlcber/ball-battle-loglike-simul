@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 33</title>
+<title>볼배틀 탑 - 데모 33.1</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -94,6 +94,10 @@
   .sentc{position:relative}
   .tick{position:absolute;left:-27px;width:24px;border-top:1px solid #ffe066;font-size:9px;color:#ffe066;line-height:1;padding-top:1px;text-align:left;pointer-events:none}
   .dh{display:inline-block;padding:0 7px 0 2px;margin-right:2px;cursor:grab;touch-action:none;color:#9ab;font-size:16px;user-select:none}
+  .sentc.cond,.sblk.cond{background:#16283a;border-color:#2f5878}.sentc.law,.sblk.law{background:#2a1c3e;border-color:#6a4a9a}
+  .rwopt.rcom{background:#262c48;border-color:#4a5280;color:#d8dcf0}.rwopt.runc{background:#173040;border-color:#3a8ac8;color:#cfeaff}
+  .rwopt.rrare{background:#2c1a44;border-color:#a060e8;color:#ead8ff;box-shadow:0 0 6px rgba(160,96,232,.45)}
+  .rwopt.rleg{background:#3a2a10;border-color:#ffb030;color:#ffe6b0;box-shadow:0 0 9px rgba(255,176,48,.6)}
   .sentc.temp{border-style:dashed;border-color:#9a7ad8}.sentc.veiled{opacity:.4}
   .sentc.drag{opacity:.5}.sentc.dropat{box-shadow:0 -3px 0 #ffe066}.dropend .decklist .sentc:last-child{box-shadow:0 3px 0 #ffe066}
   .sentc.ready{animation:rdy 1s ease-in-out infinite;border-color:#7fd8ff}
@@ -126,7 +130,7 @@
   .rwopt{background:#2a3060;border:2px solid #5560a8;border-radius:8px;padding:7px 6px;font-size:13px;font-weight:bold;color:#eef;text-align:center;line-height:1.3}
   .diag{display:flex;gap:8px;align-items:flex-start}.dsvg{flex:1.1;min-width:0}.dlist{flex:1;min-width:0}
   .mini.on{background:#ffe066;color:#222}
-  .rwopt.sel{border-color:#ffe066;background:#3d3a20}.rwopt:disabled{opacity:.3}
+  .rwopt.sel{outline:3px solid #ffe066;outline-offset:1px;transform:scale(1.03)}.rwopt:disabled{opacity:.3}
   .rwbar{position:sticky;bottom:0;gap:6px;background:rgba(10,12,24,.96);padding-top:4px}
   .pick.sel{border-color:#ffe066;background:#3d3a20}.pick:disabled{opacity:.35}
   .routeg{display:flex;gap:8px;align-items:flex-start}.routeg > .mapcard{flex:1.2;min-width:0}.routeg > .rcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
@@ -771,7 +775,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "33";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "33.1";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -824,7 +828,8 @@ const lvStar = lv => lv ? " " + "★".repeat(lv) : "";
 function sentText(x){
   return x.type === "law" ? `${SK_FULL(x.pre)} = ${LAWS[x.suf].label}${lvStar(x.lv)}` : `${COND2[x.pre].label} → ${SK_FULL(x.suf)}${lvStar(x.lv)}`;
 }
-const sentTag = x => x.type === "law" ? `<span class="tag">법칙</span>` : `<span class="tag d">조건</span>`;
+const sentTag = x => "";   // (유형 글자 없음 — 블록 색으로 구분: 조건 푸른색, 법칙 보라색)
+const sentCls = x => x.type === "law" ? "law" : "cond";
 function sentAb(x, i){   // 문장 → 전투 능력
   if (x.type === "law") return { kind: "law", trig: "law", eff: x.pre, law: x.suf, lv: x.lv || 0, sent: i, act: "law" };
   const c = COND2[x.pre]; return { kind: "cond", trig: c.trig, tp: c.tp, eff: x.suf, act: "cast", lvMul: 1 + 0.3 * (x.lv || 0), sent: i, last: 0 };
@@ -2311,8 +2316,8 @@ function deckListHtml(r, editable, battle){
     const vi = isVeiled(r, x), ai = act.indexOf(x), sec = scanSecOf(r, x), h = Math.round(sec * SCAN_PX); let ticks = "";
     if (!vi) for (let t = Math.ceil(start[ai] - 1e-6); t < start[ai] + sec - 1e-6; t++){ if (t === 0) continue; ticks += `<span class="tick" style="top:${((t - start[ai]) / sec * 100).toFixed(0)}%">${t}초</span>`; }
     const veilBtn = editable && vmax && !x.temp ? `<button class="mini${vi ? " on" : ""}" data-veil="${x.uid}" title="가리기">${vi ? "🙈" : "👁"}</button>` : "";
-    const tag = x.temp ? `<span class="tag" style="background:#6a4a9a">임시</span>` : sentTag(x);
-    return `<div class="card sentc${x.temp ? " temp" : ""}${vi ? " veiled" : ""}${h < 44 ? " thin" : ""}" id="${battle ? "slot" + i : "d" + i}" data-di="${i}" style="height:${h}px">${ticks}
+    const tag = x.temp ? `<span class="tag" style="background:#6a4a9a">임시</span>` : "";
+    return `<div class="card sentc ${sentCls(x)}${x.temp ? " temp" : ""}${vi ? " veiled" : ""}${h < 44 ? " thin" : ""}" id="${battle ? "slot" + i : "d" + i}" data-di="${i}" style="height:${h}px">${ticks}
       ${editable ? `<span class="dh" data-dh="${i}">≡</span>` : ""}<span class="sn">${vi ? "–" : ai + 1}</span>${tag}<span class="st">${sentText(x)}</span>
       ${editable ? `<span class="sbtn">${veilBtn}<button class="mini" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button><button class="mini" data-dn="${i}" ${i === r.deck.length - 1 ? "disabled" : ""}>▼</button></span>` : `<span class="cnt"></span>`}</div>`; }).join("");
 }
@@ -2493,15 +2498,20 @@ function onBattleEnd(){
   r.pickLeft = 1;
   renderReward(lines);
 }
+// 보상 조각 희귀도 → 색 (가중치가 낮을수록 희귀)
+function pieceRar(type, side, id){
+  const w = side === "L" ? (type === "law" ? SKILL[id].rar : COND2[id].rar) : (type === "law" ? LAWS[id].rar : SKILL[id].rar);
+  return w <= 0.7 ? "rleg" : w <= 1.2 ? "rrare" : w <= 1.8 ? "runc" : "rcom";
+}
 function renderReward(lines){
   phase = "reward"; const r = runState;
   if (r.rw && !r.rw.pres) r.rw = null;   // 옛 저장 형식
   if (!r.rw){ const type = rollSentType(r), pres = prefixOpts(r, type); r.rw = { type, pres, sufs: suffixOptsFor(r, type, pres), pre: null, suf: null }; }
   const w = r.rw, law = w.type === "law";
   const ok = w.pre != null && w.suf != null && sentFits(w.type, w.pre, w.suf);
-  const col = (list, side) => `<div class="rwcol">${list.map((id, i) => {
+  const col = (list, side) => `<div class="rwcol ${law ? "law" : "cond"}">${list.map((id, i) => {
     const sel = side === "L" ? w.pre === id : w.suf === id, bad = side === "R" && w.pre != null && !sentFits(w.type, w.pre, id);
-    return `<button class="rwopt${sel ? " sel" : ""}" data-${side}="${i}" ${bad ? "disabled" : ""}>${side === "L" ? preLabel(w.type, id) : sufLabel(w.type, id)}</button>`; }).join("")}</div>`;
+    return `<button class="rwopt ${pieceRar(w.type, side, id)}${sel ? " sel" : ""}" data-${side}="${i}" ${bad ? "disabled" : ""}>${side === "L" ? preLabel(w.type, id) : sufLabel(w.type, id)}</button>`; }).join("")}</div>`;
   panel.innerHTML = `<div class="mbox"><div class="mtitle">보상 · ${law ? "법칙" : "조건"}</div><div class="small" style="text-align:center">${lines.join("<br>")}</div>
     <div class="rwgrid">${col(w.pres, "L")}<div class="rwarrow">${law ? "=" : "→"}</div>${col(w.sufs, "R")}</div>
     <div class="row" style="gap:6px"><button class="main" id="rtake" ${ok ? "" : "disabled"} style="flex:2;padding:8px;font-size:14px">받기</button><button class="mini" id="rskip" style="flex:1">건너뛰기</button></div></div>`;
@@ -2593,8 +2603,8 @@ function renderShop(wasHidden, note){   // 상점: 진열대에서 고르기
   r.shop.forEach(it => { if (it.type === "remove" && !it.sold) it.price = removeCost(r); });
   const tile = (it, i) => { const icon = it.type === "sent" ? "📜" : it.type === "remove" ? "✂" : it.type === "relic" ? RELIC[it.id].icon : it.type === "potion" ? POTION[it.id].icon : "🧱";
     const name = it.type === "sent" ? sentText(it.sent) : it.type === "remove" ? "문장 지우기" : it.type === "relic" ? `${RELIC[it.id].name}${tierTag(RELIC[it.id].tier)}` : it.type === "potion" ? `${POTION[it.id].name}${tierTag(POTION[it.id].tier)}` : itemName(it);
-    const sub = it.type === "relic" ? RELIC[it.id].desc : it.type === "potion" ? POTION[it.id].desc : it.type === "sent" ? (it.sent.type === "law" ? "법칙" : "조건") : "";
-    return `<button class="tile shop${it.sold ? " sold" : ""}" data-i="${i}" ${it.sold ? "disabled" : ""}><div class="ic">${icon}</div><div class="nm">${name}</div>${sub ? `<div class="sb">${sub}</div>` : ""}<div class="pr">${it.sold ? "판매 완료" : "💰 " + it.price}</div></button>`; };
+    const sub = it.type === "relic" ? RELIC[it.id].desc : it.type === "potion" ? POTION[it.id].desc : "";
+    return `<button class="tile shop${it.type === "sent" ? " sblk " + sentCls(it.sent) : ""}${it.sold ? " sold" : ""}" data-i="${i}" ${it.sold ? "disabled" : ""}><div class="ic">${icon}</div><div class="nm">${name}</div>${sub ? `<div class="sb">${sub}</div>` : ""}<div class="pr">${it.sold ? "판매 완료" : "💰 " + it.price}</div></button>`; };
   const sec = (title, f) => { const L = r.shop.map((it, i) => [it, i]).filter(([it]) => f(it)); return L.length ? `<div class="shelf"><div class="shelfh">${title}</div><div class="tiles">${L.map(([it, i]) => tile(it, i)).join("")}</div></div>` : ""; };
   panel.innerHTML = `<div class="counter shopc"><b>🛒 상점</b><span>💰 ${r.gold}</span>${note ? `<span class="cnote">${note}</span>` : ""}</div>` +
     sec("📜 문장", it => it.type === "sent") + sec("🏺 유물 · 🧪 물약", it => it.type === "relic" || it.type === "potion" || it.type === "block") + sec("✂ 서비스", it => it.type === "remove") +
@@ -2607,7 +2617,7 @@ function renderShop(wasHidden, note){   // 상점: 진열대에서 고르기
 // 덱의 문장 하나를 고르는 화면 (지우기·강화 등)
 function renderPickSent(title, onPick, onBack, filter){
   const r = runState;
-  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">${title}</div>` + r.deck.map((x, i) => (!filter || filter(x)) ? `<button class="pick" data-si="${i}">${sentTag(x)}<b>${i + 1}. ${sentText(x)}</b></button>` : "").join("") + `<button class="main" id="pback">뒤로</button>`;
+  panel.innerHTML = `<div class="msg" style="background:#232a4a;border-color:#4a5290">${title}</div>` + r.deck.map((x, i) => (!filter || filter(x)) ? `<button class="pick sblk ${sentCls(x)}" data-si="${i}"><b>${i + 1}. ${sentText(x)}</b></button>` : "").join("") + `<button class="main" id="pback">뒤로</button>`;
   panel.querySelectorAll(".pick[data-si]").forEach(b => b.onclick = () => onPick(Number(b.dataset.si)));
   document.getElementById("pback").onclick = onBack;
 }
@@ -2619,7 +2629,7 @@ function renderForge(wasHidden, note, view){   // 대장간: 모루·숫돌·화
   const back = `<button class="main" id="fback">뒤로</button>`, my = [...deckAttrSet(r)].filter(a => UP_ATTRS.includes(a));
   if (view === "up"){
     panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔨 모루 — 강화할 문장</div><div class="tiles">${r.deck.map((x, i) => { const lv = x.lv || 0, max = lv >= SENT_MAX_LV;
-      return `<button class="tile forge" data-su="${i}" ${max ? "disabled" : ""}><div class="nm">${i + 1}. ${sentText(x)}</div><div class="sb">${max ? "최대" : `★${lv + 1}: ${sentUpText(x)}`}</div><div class="pr">${max ? "" : "💰 " + sentUpCost(lv)}</div></button>`; }).join("")}</div></div>` + back;
+      return `<button class="tile forge sblk ${sentCls(x)}" data-su="${i}" ${max ? "disabled" : ""}><div class="nm">${i + 1}. ${sentText(x)}</div><div class="sb">${max ? "최대" : `★${lv + 1}: ${sentUpText(x)}`}</div><div class="pr">${max ? "" : "💰 " + sentUpCost(lv)}</div></button>`; }).join("")}</div></div>` + back;
     panel.querySelectorAll(".tile[data-su]").forEach(b => b.onclick = () => { const e = upSent(r, Number(b.dataset.su)); renderForge(wasHidden, e || "강화!", "up"); });
   } else if (view === "attr"){
     panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔥 화로 — 속성 단련 (내 스킬의 속성만)</div>${my.length ? `<div class="tiles">${my.map(a => { const lv = r.attrUp[a] || 0, max = lv >= ATTR_UP_MAX;
