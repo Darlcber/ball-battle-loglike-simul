@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 33.1</title>
+<title>볼배틀 탑 - 데모 34</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -95,6 +95,7 @@
   .tick{position:absolute;left:-27px;width:24px;border-top:1px solid #ffe066;font-size:9px;color:#ffe066;line-height:1;padding-top:1px;text-align:left;pointer-events:none}
   .dh{display:inline-block;padding:0 7px 0 2px;margin-right:2px;cursor:grab;touch-action:none;color:#9ab;font-size:16px;user-select:none}
   .sentc.cond,.sblk.cond{background:#16283a;border-color:#2f5878}.sentc.law,.sblk.law{background:#2a1c3e;border-color:#6a4a9a}
+  .sentc.rule,.sblk.rule{background:#173326;border-color:#3f9a6a}.rwopt.rrule{background:#173326;border-color:#4fc88a;color:#c8ffe0;box-shadow:0 0 8px rgba(79,200,138,.5)}
   .rwopt.rcom{background:#262c48;border-color:#4a5280;color:#d8dcf0}.rwopt.runc{background:#173040;border-color:#3a8ac8;color:#cfeaff}
   .rwopt.rrare{background:#2c1a44;border-color:#a060e8;color:#ead8ff;box-shadow:0 0 6px rgba(160,96,232,.45)}
   .rwopt.rleg{background:#3a2a10;border-color:#ffb030;color:#ffe6b0;box-shadow:0 0 9px rgba(255,176,48,.6)}
@@ -554,7 +555,7 @@ const RELIC = {
   thorn:    { name: "가시 팔찌",      icon: "🌵", tier: "c", desc: "피해를 입을 때 공격자에게 4 피해", fx: { thorns: 4 } },
   hourglass:{ name: "모래시계",       icon: "⏳", tier: "u", desc: "전투 시작 때 '초마다' 문장이 바로 발동 준비", fx: { readyStart: 1 } },
   fang:     { name: "흡혈 송곳니",    icon: "🦷", tier: "u", desc: "입힌 피해의 7%만큼 체력 회복", fx: { lifesteal: 0.07 } },
-  bookmark: { name: "책갈피", icon: "🔖", tier: "c", desc: "법칙 문장 검사 시간 -50%", fx: { lawScan: 0.5 } },
+  bookmark: { name: "책갈피", icon: "🔖", tier: "c", desc: "버프 문장 검사 시간 -50%", fx: { lawScan: 0.5 } },
   secondhand:{ name: "초침", icon: "⏱️", tier: "l", desc: "모든 문장 검사 시간 -25%", fx: { gapMul: 0.75 } },
   gear:     { name: "시계 태엽",      icon: "⚙️", tier: "u", desc: "문장 검사 시간 -10%", fx: { gapMul: 0.9 } },
   redlens:  { name: "붉은 렌즈",      icon: "🔴", tier: "u", desc: "모든 스킬 위력 ×1.12", fx: { modPow: 1.12 } },
@@ -591,8 +592,9 @@ function pickByTier(ids, tierOf, weights, rng){
 const RELIC_MULT = new Set(["xpMul", "modPow", "modCd", "potionPow", "gapMul", "lawScan"]);   // 곱해지는 수치, 나머지는 더해짐
 function relicFx(r){
   const o = { atk: 0, def: 0, healAfter: 0, potionSlots: 0, xpMul: 1, thorns: 0, readyStart: 0, lifesteal: 0, gapMul: 1, modPow: 1, modCd: 1, startShield: 0,
-              regen: 0, veil: 0, lawScan: 1, dropBonus: 0, compass: 0, startBlast: 0, doubleCast: 0, diceExtra: 0, potionPow: 1, attrAll: 0, alchemy: 0, plague: 0, bloodTrail: 0 };
+              regen: 0, veil: 0, lawScan: 1, goldMul: 1, diceRolls: 0, shopMul: 1, grow: 0, rewardN: 3, rerolls: 0, dropBonus: 0, compass: 0, startBlast: 0, doubleCast: 0, diceExtra: 0, potionPow: 1, attrAll: 0, alchemy: 0, plague: 0, bloodTrail: 0 };
   for (const x of r.relics) for (const k in RELIC[x.id].fx) o[k] = RELIC_MULT.has(k) ? o[k] * RELIC[x.id].fx[k] : o[k] + RELIC[x.id].fx[k];
+  for (const x of r.deck || []) if (x.type === "rule" && RULES[x.pre]) RULES[x.pre].fx(o, 1 + 0.5 * (x.lv || 0));   // 규칙형 문장
   return o;
 }
 function giveRelicId(r, id){   // 특정 유물 지급 (이미 있으면 null)
@@ -775,7 +777,7 @@ const EFF = {
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "33.1";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "34";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -825,12 +827,27 @@ const rarFromSec = t => t < 1.5 ? 0.4 : t < 3 ? 0.7 : t < 5 ? 1 : t < 8 ? 1.6 : 
 for (const id in COND2) COND2[id].rar = rarFromSec(READY_SEC[id] != null ? READY_SEC[id] : 10);
 const SENT_MAX_LV = 2, sentUpCost = lv => 40 + 30 * lv;
 const lvStar = lv => lv ? " " + "★".repeat(lv) : "";
+// ===== 규칙형 문장 (데모 34): 전투 밖 성장 효과. 덱에 있는 동안 게임 내내 적용, 전투에선 검사 시간만 차지 =====
+// fx(o, m): relicFx 결과 o에 효과를 더함. m = 강화 배율(1, 1.5, 2)
+const RULES = {
+  r_xp:    { ent: "📈 경험치", label: "획득 +30%",          rar: 1.2, fx: (o, m) => { o.xpMul *= 1 + 0.3 * m; } },
+  r_gold:  { ent: "💰 골드",   label: "획득 +30%",          rar: 1.2, fx: (o, m) => { o.goldMul *= 1 + 0.3 * m; } },
+  r_heal:  { ent: "❤ 회복",   label: "전투 후 체력 6%",    rar: 1,   fx: (o, m) => { o.healAfter += 0.06 * m; } },
+  r_dice:  { ent: "🎲 주사위", label: "레벨업 때 1번 더",    rar: 0.8, fx: (o, m) => { o.diceRolls += Math.round(m); } },
+  r_shop:  { ent: "🛒 상점",   label: "가격 -25%",          rar: 1,   fx: (o, m) => { o.shopMul *= Math.max(0.4, 1 - 0.25 * m); } },
+  r_grow:  { ent: "🌱 성장",   label: "승리마다 최대 체력 +3", rar: 0.8, fx: (o, m) => { o.grow += 3 * m; } },
+  r_opts:  { ent: "🎁 보상",   label: "선택지 4개씩",        rar: 0.6, noUp: true, once: true, fx: o => { o.rewardN = 4; } },
+  r_reroll:{ ent: "🎁 보상",   label: "다시 뽑기 1회",       rar: 0.8, fx: (o, m) => { o.rerolls += Math.round(m); } }
+};
+const RULE_CHANCE = 0.35;   // 버프형 보상에서 한 줄이 통째로 규칙형으로 바뀔 확률
 function sentText(x){
+  if (x.type === "rule") return `${RULES[x.pre].ent} = ${RULES[x.pre].label}${lvStar(x.lv)}`;
   return x.type === "law" ? `${SK_FULL(x.pre)} = ${LAWS[x.suf].label}${lvStar(x.lv)}` : `${COND2[x.pre].label} → ${SK_FULL(x.suf)}${lvStar(x.lv)}`;
 }
-const sentTag = x => "";   // (유형 글자 없음 — 블록 색으로 구분: 조건 푸른색, 법칙 보라색)
-const sentCls = x => x.type === "law" ? "law" : "cond";
+const sentTag = x => "";   // (유형 글자 없음 — 블록 색으로 구분: 조건 푸른색, 버프 보라색, 규칙 초록색)
+const sentCls = x => x.type === "law" ? "law" : x.type === "rule" ? "rule" : "cond";
 function sentAb(x, i){   // 문장 → 전투 능력
+  if (x.type === "rule") return { kind: "rule", trig: "rule", eff: null, act: "rule", sent: i };   // 전투에선 검사 시간만 차지
   if (x.type === "law") return { kind: "law", trig: "law", eff: x.pre, law: x.suf, lv: x.lv || 0, sent: i, act: "law" };
   const c = COND2[x.pre]; return { kind: "cond", trig: c.trig, tp: c.tp, eff: x.suf, act: "cast", lvMul: 1 + 0.3 * (x.lv || 0), sent: i, last: 0 };
 }
@@ -1442,9 +1459,10 @@ const isAct1 = r => actOf(Math.min(r.floor, TOP_FLOOR)) === 1;
 const condW = (r, id) => COND2[id].temp || !condGate(r, id) ? 0 : COND2[id].rar * (isAct1(r) ? (ACT1_WEAK[id] != null ? ACT1_WEAK[id] : 1) : 1);
 const skillW = (r, sk) => SKILL[sk].enemy || SKILL[sk].start || SKILL[sk].temp ? 0 : isAct1(r) ? (SKILL[sk].g === "공격" ? 3 : ["shield", "heal", "atk"].includes(sk) ? 1 : 0.2) : SKILL[sk].rar;
 function prefixOpts(r, type){
-  if (type === "cond") return pickDistinct(Object.keys(COND2).filter(id => condW(r, id) > 0), id => condW(r, id), 3, r.rng);
-  const used = usedSkills(r);   // 법칙은 덱에서 쓰는 스킬이 더 잘 나옴
-  return pickDistinct(Object.keys(SKILL), sk => SKILL[sk].rar * (used.includes(sk) ? 4 : 1), 3, r.rng);
+  const n = relicFx(r).rewardN;
+  if (type === "cond") return pickDistinct(Object.keys(COND2).filter(id => condW(r, id) > 0), id => condW(r, id), n, r.rng);
+  const used = usedSkills(r);   // 버프는 덱에서 쓰는 스킬이 더 잘 나옴
+  return pickDistinct(Object.keys(SKILL), sk => SKILL[sk].rar * (used.includes(sk) ? 4 : 1), n, r.rng);
 }
 function suffixOpts(r, type, pre){
   if (type === "cond") return pickDistinct(Object.keys(SKILL), sk => skillW(r, sk), 3, r.rng);
@@ -1452,8 +1470,9 @@ function suffixOpts(r, type, pre){
 }
 const LAW_ANY = ["l_pow1", "l_pow2", "l_exec"];   // 어떤 개체에도 붙는 법칙
 function suffixOptsFor(r, type, pres){   // 앞자리 3개를 보고 뒷자리 3개를 한꺼번에 뽑음 (법칙은 적어도 하나가 셋 모두에 맞게)
-  if (type === "cond") return pickDistinct(Object.keys(SKILL), sk => skillW(r, sk), 3, r.rng);
-  const o = pickDistinct(Object.keys(LAWS).filter(l => pres.some(p => LAWS[l].fits(p))), l => LAWS[l].rar, 3, r.rng);
+  const n = pres.length;
+  if (type === "cond") return pickDistinct(Object.keys(SKILL), sk => skillW(r, sk), n, r.rng);
+  const o = pickDistinct(Object.keys(LAWS).filter(l => pres.some(p => LAWS[l].fits(p))), l => LAWS[l].rar, n, r.rng);
   if (!o.some(l => LAW_ANY.includes(l))){ const a = pickDistinct(LAW_ANY.filter(l => !o.includes(l)), l => LAWS[l].rar, 1, r.rng)[0]; o[o.length - 1] = a; }
   return o;
 }
@@ -1463,15 +1482,16 @@ const preLabel = (type, id) => type === "law" ? SK_FULL(id) : COND2[id].label;
 const sufLabel = (type, id) => type === "law" ? LAWS[id].label : SK_FULL(id);
 function genShop(r){
   const items = [], rng = r.rng;
-  for (let i = 0; i < 2; i++) items.push({ type: "sent", sent: randomSent(r), price: 55 });
+  const sm = relicFx(r).shopMul, sp = p => Math.max(1, Math.round(p * sm));
+  for (let i = 0; i < 2; i++) items.push({ type: "sent", sent: randomSent(r), price: sp(55) });
   items.push({ type: "remove", price: removeCost(r) });
   const used = [];
   for (let i = 0; i < 2; i++){
     const left = Object.keys(RELIC).filter(id => RELIC[id].tier !== "k" && !r.relics.some(x => x.id === id) && !used.includes(id)); if (!left.length) break;
     const id = pickByTier(left, id => RELIC[id].tier, TIER_W.normal, rng); used.push(id);
-    items.push({ type: "relic", id, price: PRICE.relic[RELIC[id].tier] });
+    items.push({ type: "relic", id, price: sp(PRICE.relic[RELIC[id].tier]) });
   }
-  for (let i = 0; i < 2; i++){ const id = pickPotionId(r); items.push({ type: "potion", id, price: PRICE.potion[POTION[id].tier] }); }
+  for (let i = 0; i < 2; i++){ const id = pickPotionId(r); items.push({ type: "potion", id, price: sp(PRICE.potion[POTION[id].tier]) }); }
   return items;
 }
 function buyItem(r, it){   // 실패하면 이유 문자열, 성공하면 null
@@ -1546,7 +1566,7 @@ function rollDice(r){
 }
 function winFloor(r, s, kind){
   dropTemps(r);
-  const fx = relicFx(r), f = r.floor, mul = kind === "elite" ? 1.5 : 1, gold = Math.round((15 + absFloor(f) * 4) * mul) + (r.fightBonusGold || 0), xp = Math.round(xpFor(f, kind) * fx.xpMul), out = { gold, xp, rolls: [] };
+  const fx = relicFx(r), f = r.floor, mul = kind === "elite" ? 1.5 : 1, gold = Math.round((15 + absFloor(f) * 4) * mul * fx.goldMul) + (r.fightBonusGold || 0), xp = Math.round(xpFor(f, kind) * fx.xpMul), out = { gold, xp, rolls: [] };
   r.fightBonusGold = 0;
   if (s.reviveUsed){ const ph = r.relics.find(x => x.id === "phoenix" && !x.used); if (ph) ph.used = true; }
   r.hp = clamp(Math.round(Math.max(1, s.balls[0].hp)), 1, r.maxHp);
@@ -1554,11 +1574,12 @@ function winFloor(r, s, kind){
   while (r.xp >= xpNeed(r.level)){
     r.xp -= xpNeed(r.level); r.level++;
     const roll = { lv: r.level, odds: statOdds(r).map(o => `${STAT_NAME[o.st]} ${o.pct}%`).join(" / "), faces: [] };
-    for (let k = 0; k < DICE_ROLLS; k++) roll.faces.push(rollDice(r));   // 레벨업마다 주사위 3번
+    for (let k = 0; k < DICE_ROLLS + fx.diceRolls; k++) roll.faces.push(rollDice(r));   // 레벨업마다 주사위 3번
     if (fx.diceExtra && r.rng() < fx.diceExtra) roll.extra = rollDice(r);   // 유물: 행운의 주사위
     out.rolls.push(roll);
   }
   const heal = Math.max(0, Math.round(r.maxHp * (POST_FIGHT_HEAL + fx.healAfter))); r.hp = Math.min(r.maxHp, r.hp + heal); out.heal = heal;
+  if (fx.grow){ r.maxHp += fx.grow; r.hp += fx.grow; out.grow = fx.grow; }
   r.floor++; r.retry = 0;
   out.potion = rollPotionDrop(r, kind);
   return out;
@@ -1909,7 +1930,7 @@ function botForge(r, smart, rng){
     if (upSent(r, i)) return;
   }
 }
-const condScoreOf = x => x.type === "cond" ? condScore(x.pre) + skillScore(x.suf) : LAW_SCORE[x.suf];
+const condScoreOf = x => x.type === "cond" ? condScore(x.pre) + skillScore(x.suf) : x.type === "rule" ? 1.5 : LAW_SCORE[x.suf];
 function botEvent(r, rng){   // 봇: 이벤트를 무작위 선택으로 진행. 전투가 시작되면 그 종류를 돌려줌
   let node = pickEvent(r);
   for (let n = 0; n < 6; n++){
@@ -1956,6 +1977,7 @@ const LAW_SCORE = { l_pow10: 1, l_twin: 4, l_pow2: 3, l_exec: 2.2, l_pow1: 2, l_
 function botReward(r, smart, rng){
   const type = rollSentType(r), best = (opts, sc) => smart ? opts.slice().sort((a, b) => sc(b) - sc(a))[0] : opts[Math.floor(rng() * opts.length)];
   const pres = prefixOpts(r, type), sufs = suffixOptsFor(r, type, pres);
+  if (type === "law" && rng() < RULE_CHANCE * 0.5){ const id = pickDistinct(Object.keys(RULES).filter(k => !(RULES[k].once && r.deck.some(x => x.type === "rule" && x.pre === k))), k => RULES[k].rar, 1, rng)[0]; if (id){ r.deck.push(mkSent(r, "rule", id, "")); return; } }
   const pre = best(pres, id => type === "law" ? (usedSkills(r).includes(id) ? 2 : 0) + skillScore(id) : condScore(id));
   const suf = best(sufs.filter(x => sentFits(type, pre, x)), id => type === "law" ? LAW_SCORE[id] : skillScore(id));
   if (smart && type === "cond" && condScore(pre) < 0.6 && r.deck.length >= 7) return;   // 약한 조건은 덱이 무거우면 건너뜀
@@ -2133,7 +2155,7 @@ function openInfo(title, html, bind){   // 버튼으로 여는 정보 창
   if (bind) bind(el);
 }
 function closeInfo(){ const el = document.getElementById("info"); el.className = ""; el.innerHTML = ""; }
-function infoStats(){ const r = runState, fx = relicFx(r); return `<div class="card small">버전 ${VERSION}<br>🏢 ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 / ${TOP_FLOOR} · Lv${r.level} (경험치 ${r.xp}/${xpNeed(r.level)}) · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 검사 시간 ×${gapMulOf(r).toFixed(2)}<br>📜 문장 ${r.deck.length}개 · 한 바퀴 ${cycleOf(r).toFixed(1)}초 (문장당 ${(SCAN_BASE * gapMulOf(r)).toFixed(2)}초${relicFx(r).lawScan < 1 ? `, 법칙 ${(SCAN_BASE * gapMulOf(r) * relicFx(r).lawScan).toFixed(2)}초` : ""})</div>`; }
+function infoStats(){ const r = runState, fx = relicFx(r); return `<div class="card small">버전 ${VERSION}<br>🏢 ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 / ${TOP_FLOOR} · Lv${r.level} (경험치 ${r.xp}/${xpNeed(r.level)}) · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 검사 시간 ×${gapMulOf(r).toFixed(2)}<br>📜 문장 ${r.deck.length}개 · 한 바퀴 ${cycleOf(r).toFixed(1)}초 (문장당 ${(SCAN_BASE * gapMulOf(r)).toFixed(2)}초${relicFx(r).lawScan < 1 ? `, 버프 ${(SCAN_BASE * gapMulOf(r) * relicFx(r).lawScan).toFixed(2)}초` : ""})</div>`; }
 document.getElementById("bDeck").onclick = openDeck;
 document.getElementById("bInfo").onclick = () => runState && openInfo("📊 정보", infoStats() + (runState.enc ? deckGlanceHtml(runState) + deckAttrHtml(runState) : ""));
 document.getElementById("bRelic").onclick = () => runState && openInfo("🏺 유물", relicHtml(runState));
@@ -2295,7 +2317,7 @@ function deckAttrHtml(r){
     ${react.length ? `<div class="small"><b>시너지</b> ${react.join(" · ")}</div>` : ""}
     <div class="small" style="margin-top:4px"><b>상성</b></div>
     ${casts.map(x => `<div class="small">• 문장 ${x.i + 1} ${SK_FULL(x.ab.eff)} → ${r.enc.map(e => { const m = dmgMult(x.ab.eff, e), tag = m > 1 ? "약점 ×" + m : m < 1 ? "저항 ×" + m : "×1"; return `${e.icon}${tag}`; }).join(" ")}</div>`).join("")}
-    ${enh.length ? `<div class="small" style="margin-top:4px"><b>법칙</b> ${enh.map(x => `${x.i + 1}. ${sentText(x.x)}`).join(" / ")}</div>` : ""}`;
+    ${enh.length ? `<div class="small" style="margin-top:4px"><b>버프·규칙</b> ${enh.map(x => `${x.i + 1}. ${sentText(x.x)}`).join(" / ")}</div>` : ""}`;
   return `<details class="card"><summary><b>🧬 덱 속성 분석</b></summary>${body}</details>`;
 }
 const leftBody = () => document.getElementById("leftBody"), rightEl = () => document.getElementById("right");
@@ -2478,7 +2500,7 @@ function updateBattleUi(){
     k.abs.forEach((ab, i) => { const card = document.getElementById(idOf(i)); if (!card) return;
       const cur = !k.dead && i === sc.i && sc.busy <= 0, run = !k.dead && sc.busy > 0 && i === (sc.i - 1 + n) % n;
       card.classList.toggle("scan", cur); card.classList.toggle("exec", run); card.classList.toggle("ready", !k.dead && !!ab.ready && !run);
-      const el = card.querySelector(".cnt"); if (el) el.textContent = ab.kind === "law" ? (ab.applied ? "적용됨" : "적용 전") : `실행 ${ab.fired}회${k.frozenT > 0 ? " · 🧊" : ""}`; }); };
+      const el = card.querySelector(".cnt"); if (el) el.textContent = ab.kind === "rule" ? "규칙" : ab.kind === "law" ? (ab.applied ? "적용됨" : "적용 전") : `실행 ${ab.fired}회${k.frozenT > 0 ? " · 🧊" : ""}`; }); };
   if (document.querySelectorAll("#right .ecard").length !== state.balls.length - 1) rightEl().innerHTML = `<div class="sideh">적 문장</div>` + enemyCards(state.balls.slice(1).map(k => k.cfg), state);   // 분열 등으로 적 수가 바뀌면 다시 그림
   mark(state.balls[0], i => "slot" + i);
   state.balls.slice(1).forEach((k, ei) => { mark(k, i => `es${ei}_${i}`); const c = document.getElementById("en" + ei); if (c){ c.style.opacity = k.dead ? 0.35 : 1; const hp = c.querySelector(".lab span"); if (hp) hp.textContent = `❤${fmt(Math.max(0, k.hp))}/${fmt(k.maxHp)} ⚔${fmt(k.atk)} 🛡${k.def}`; } });
@@ -2491,7 +2513,7 @@ function onBattleEnd(){
   if (w === 1){ phase = "over"; renderOver(false); return; }
   const wasFloor = r.floor, kind = r.encKind, res = winFloor(r, state, kind);
   updateHud();
-  const lines = [`💰 +${res.gold} · ✨ 경험치 +${res.xp}${res.heal ? ` · ❤ +${res.heal}` : ""}`].concat(res.rolls.map(x => `🎲 Lv${x.lv} 달성! 주사위 ${x.faces.length}번 → <b>${x.faces.map(faceText).join(" · ")}</b>${x.extra ? `<br>🎲 행운의 주사위! 한 번 더 → <b>${faceText(x.extra)}</b>` : ""}`));
+  const lines = [`💰 +${res.gold} · ✨ 경험치 +${res.xp}${res.heal ? ` · ❤ +${res.heal}` : ""}${res.grow ? ` · 🌱 최대 체력 +${res.grow}` : ""}`].concat(res.rolls.map(x => `🎲 Lv${x.lv} 달성! 주사위 ${x.faces.length}번 → <b>${x.faces.map(faceText).join(" · ")}</b>${x.extra ? `<br>🎲 행운의 주사위! 한 번 더 → <b>${faceText(x.extra)}</b>` : ""}`));
   if (res.potion) lines.push(res.potion.kept ? `🧪 물약 획득: <b>${POTION[res.potion.id].icon} ${POTION[res.potion.id].name}</b>` : `🧪 ${POTION[res.potion.id].name}을(를) 찾았지만 물약 칸이 가득 차서 버렸어요`);
   if (wasFloor === TOP_FLOOR){ phase = "over"; renderOver(true, lines); return; }
   if (isBossFloor(wasFloor)) lines.unshift(`👑 <b>${actOf(wasFloor)}막 보스 격파!</b> 문장 보상 + 희귀 유물 · ${actOf(r.floor)}막으로`);
@@ -2500,25 +2522,38 @@ function onBattleEnd(){
 }
 // 보상 조각 희귀도 → 색 (가중치가 낮을수록 희귀)
 function pieceRar(type, side, id){
+  if (id === "@rule") return "rrule";
   const w = side === "L" ? (type === "law" ? SKILL[id].rar : COND2[id].rar) : (type === "law" ? LAWS[id].rar : SKILL[id].rar);
   return w <= 0.7 ? "rleg" : w <= 1.2 ? "rrare" : w <= 1.8 ? "runc" : "rcom";
 }
+function newRewardRoll(r, type){
+  const pres = prefixOpts(r, type), w = { type, pres, sufs: suffixOptsFor(r, type, pres), pre: null, suf: null, rule: null, ruleRow: -1, rr: relicFx(r).rerolls };
+  if (type === "law" && r.rng() < RULE_CHANCE){   // 버프 보상: 한 줄이 통째로 규칙형 [대상 = 효과]
+    const have = new Set(r.deck.filter(x => x.type === "rule").map(x => x.pre)), ids = Object.keys(RULES).filter(id => !(RULES[id].once && have.has(id)));
+    const id = pickDistinct(ids, k => RULES[k].rar, 1, r.rng)[0]; if (id){ w.rule = id; w.ruleRow = Math.floor(r.rng() * pres.length); }
+  }
+  return w;
+}
 function renderReward(lines){
   phase = "reward"; const r = runState;
-  if (r.rw && !r.rw.pres) r.rw = null;   // 옛 저장 형식
-  if (!r.rw){ const type = rollSentType(r), pres = prefixOpts(r, type); r.rw = { type, pres, sufs: suffixOptsFor(r, type, pres), pre: null, suf: null }; }
-  const w = r.rw, law = w.type === "law";
-  const ok = w.pre != null && w.suf != null && sentFits(w.type, w.pre, w.suf);
-  const col = (list, side) => `<div class="rwcol ${law ? "law" : "cond"}">${list.map((id, i) => {
-    const sel = side === "L" ? w.pre === id : w.suf === id, bad = side === "R" && w.pre != null && !sentFits(w.type, w.pre, id);
+  if (r.rw && (!r.rw.pres || r.rw.ruleRow == null)) r.rw = null;   // 옛 저장 형식
+  if (!r.rw) r.rw = newRewardRoll(r, rollSentType(r));
+  const w = r.rw, law = w.type === "law", isRule = w.pre === "@rule";
+  const ok = isRule || (w.pre != null && w.suf != null && sentFits(w.type, w.pre, w.suf));
+  const col = (list, side) => `<div class="rwcol ${law ? "law" : "cond"}">${list.map((id0, i) => {
+    const id = i === w.ruleRow ? "@rule" : id0;
+    if (id === "@rule") return `<button class="rwopt rrule${isRule ? " sel" : ""}" data-rule="1">${side === "L" ? RULES[w.rule].ent : RULES[w.rule].label}</button>`;
+    const sel = side === "L" ? w.pre === id : w.suf === id, bad = side === "R" && w.pre != null && !isRule && !sentFits(w.type, w.pre, id);
     return `<button class="rwopt ${pieceRar(w.type, side, id)}${sel ? " sel" : ""}" data-${side}="${i}" ${bad ? "disabled" : ""}>${side === "L" ? preLabel(w.type, id) : sufLabel(w.type, id)}</button>`; }).join("")}</div>`;
-  panel.innerHTML = `<div class="mbox"><div class="mtitle">보상 · ${law ? "법칙" : "조건"}</div><div class="small" style="text-align:center">${lines.join("<br>")}</div>
+  panel.innerHTML = `<div class="mbox"><div class="mtitle">보상 · ${law ? "버프" : "조건"}</div><div class="small" style="text-align:center">${lines.join("<br>")}</div>
     <div class="rwgrid">${col(w.pres, "L")}<div class="rwarrow">${law ? "=" : "→"}</div>${col(w.sufs, "R")}</div>
-    <div class="row" style="gap:6px"><button class="main" id="rtake" ${ok ? "" : "disabled"} style="flex:2;padding:8px;font-size:14px">받기</button><button class="mini" id="rskip" style="flex:1">건너뛰기</button></div></div>`;
+    <div class="row" style="gap:6px"><button class="main" id="rtake" ${ok ? "" : "disabled"} style="flex:2;padding:8px;font-size:14px">받기</button>${w.rr > 0 ? `<button class="mini" id="rreroll" style="flex:1">🔄 다시 뽑기 ${w.rr}</button>` : ""}<button class="mini" id="rskip" style="flex:1">건너뛰기</button></div></div>`;
   const done = () => { r.rw = null; if (r.encKind === "elite" || r.encKind === "boss") renderRelicGain(grantRelic(r, r.encKind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
-  panel.querySelectorAll(".rwopt[data-l]").forEach(b => b.onclick = () => { w.pre = w.pres[+b.dataset.l]; if (w.suf != null && !sentFits(w.type, w.pre, w.suf)) w.suf = null; renderReward(lines); });
-  panel.querySelectorAll(".rwopt[data-r]").forEach(b => b.onclick = () => { w.suf = w.sufs[+b.dataset.r]; renderReward(lines); });
-  document.getElementById("rtake").onclick = () => { if (!ok) return; r.deck.push(mkSent(r, w.type, w.pre, w.suf)); done(); };
+  panel.querySelectorAll(".rwopt[data-rule]").forEach(b => b.onclick = () => { w.pre = w.suf = "@rule"; renderReward(lines); });
+  panel.querySelectorAll(".rwopt[data-l]").forEach(b => b.onclick = () => { w.pre = w.pres[+b.dataset.l]; if (w.suf === "@rule" || (w.suf != null && !sentFits(w.type, w.pre, w.suf))) w.suf = null; renderReward(lines); });
+  panel.querySelectorAll(".rwopt[data-r]").forEach(b => b.onclick = () => { w.suf = w.sufs[+b.dataset.r]; if (w.pre === "@rule") w.pre = null; renderReward(lines); });
+  document.getElementById("rtake").onclick = () => { if (!ok) return; r.deck.push(isRule ? mkSent(r, "rule", w.rule, "") : mkSent(r, w.type, w.pre, w.suf)); done(); };
+  const rb = document.getElementById("rreroll"); if (rb) rb.onclick = () => { const left = w.rr - 1; r.rw = newRewardRoll(r, w.type); r.rw.rr = left; renderReward(lines); };
   document.getElementById("rskip").onclick = done;
 }
 function renderRelicGain(id, next){
@@ -2600,7 +2635,7 @@ function itemName(it){ return it.type === "sent" ? `${sentText(it.sent)}` : it.t
 function itemDesc(it){ return it.type === "sent" ? "" : it.type === "remove" ? "" : it.type === "block" ? offerDesc(it.ids) : it.type === "relic" ? RELIC[it.id].desc : POTION[it.id].desc; }
 function renderShop(wasHidden, note){   // 상점: 진열대에서 고르기
   phase = "shop"; const r = runState; updateHud();
-  r.shop.forEach(it => { if (it.type === "remove" && !it.sold) it.price = removeCost(r); });
+  r.shop.forEach(it => { if (it.type === "remove" && !it.sold) it.price = Math.max(1, Math.round(removeCost(r) * relicFx(r).shopMul)); });
   const tile = (it, i) => { const icon = it.type === "sent" ? "📜" : it.type === "remove" ? "✂" : it.type === "relic" ? RELIC[it.id].icon : it.type === "potion" ? POTION[it.id].icon : "🧱";
     const name = it.type === "sent" ? sentText(it.sent) : it.type === "remove" ? "문장 지우기" : it.type === "relic" ? `${RELIC[it.id].name}${tierTag(RELIC[it.id].tier)}` : it.type === "potion" ? `${POTION[it.id].name}${tierTag(POTION[it.id].tier)}` : itemName(it);
     const sub = it.type === "relic" ? RELIC[it.id].desc : it.type === "potion" ? POTION[it.id].desc : "";
@@ -2622,13 +2657,13 @@ function renderPickSent(title, onPick, onBack, filter){
   document.getElementById("pback").onclick = onBack;
 }
 function upSent(r, i){ const x = r.deck[i]; if (!x || (x.lv || 0) >= SENT_MAX_LV) return "이미 최대 단계예요"; const c = sentUpCost(x.lv || 0); if (r.gold < c) return "골드가 부족해요"; r.gold -= c; x.lv = (x.lv || 0) + 1; return null; }
-const sentUpText = x => x.type === "law" ? "법칙 효과 +50%" : "그 문장의 위력 +30%";
+const sentUpText = x => x.type === "law" ? "버프 효과 +50%" : x.type === "rule" ? "규칙 효과 +50%" : "그 문장의 위력 +30%";
 function renderForge(wasHidden, note, view){   // 대장간: 모루·숫돌·화로 중 하나를 골라 들어감 (각 화면에 뒤로)
   phase = "forge"; const r = runState; updateHud();
   const head = `<div class="counter forgec"><b>🔨 대장간</b><span>💰 ${r.gold}</span>${note ? `<span class="cnote">${note}</span>` : ""}</div>`;
   const back = `<button class="main" id="fback">뒤로</button>`, my = [...deckAttrSet(r)].filter(a => UP_ATTRS.includes(a));
   if (view === "up"){
-    panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔨 모루 — 강화할 문장</div><div class="tiles">${r.deck.map((x, i) => { const lv = x.lv || 0, max = lv >= SENT_MAX_LV;
+    panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔨 모루 — 강화할 문장</div><div class="tiles">${r.deck.map((x, i) => { const lv = x.lv || 0, max = lv >= SENT_MAX_LV || (x.type === "rule" && RULES[x.pre].noUp);
       return `<button class="tile forge sblk ${sentCls(x)}" data-su="${i}" ${max ? "disabled" : ""}><div class="nm">${i + 1}. ${sentText(x)}</div><div class="sb">${max ? "최대" : `★${lv + 1}: ${sentUpText(x)}`}</div><div class="pr">${max ? "" : "💰 " + sentUpCost(lv)}</div></button>`; }).join("")}</div></div>` + back;
     panel.querySelectorAll(".tile[data-su]").forEach(b => b.onclick = () => { const e = upSent(r, Number(b.dataset.su)); renderForge(wasHidden, e || "강화!", "up"); });
   } else if (view === "attr"){
@@ -2713,7 +2748,7 @@ function renderVault(){   // 개발용: 문장 만들기 / 지우기
   const sufs = t === "law" ? Object.keys(LAWS).filter(l => LAWS[l].fits(pre)) : Object.keys(SKILL);
   el.className = "on";
   el.innerHTML = `<div class="vsheet"><div class="vhead"><div class="row"><b>🛠 문장 만들기</b><span class="small">덱 ${r.deck.length}개</span><button class="mini" id="vclose" style="margin-left:auto">닫기 ✕</button></div>
-    <div class="row"><button class="tab ${t === "cond" ? "on" : ""}" data-vk="cond">조건형</button><button class="tab ${t === "law" ? "on" : ""}" data-vk="law">법칙형</button></div>
+    <div class="row"><button class="tab ${t === "cond" ? "on" : ""}" data-vk="cond">조건형</button><button class="tab ${t === "law" ? "on" : ""}" data-vk="law">버프형</button></div>
     <div class="row"><select id="vpre">${pres.map(id => `<option value="${id}" ${id === pre ? "selected" : ""}>${preLabel(t, id)}</option>`).join("")}</select></div>
     <div class="row"><select id="vsuf">${sufs.map(id => `<option value="${id}">${sufLabel(t, id)}</option>`).join("")}</select><button class="mini" id="vadd">덱에 추가</button></div>
     <div class="vinfo">${vaultMsg || "문장을 만들어 덱 맨 뒤에 넣어요. 아래에서 지울 수 있어요."}</div></div>
