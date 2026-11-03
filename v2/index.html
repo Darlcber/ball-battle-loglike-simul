@@ -3021,25 +3021,35 @@ const CARDS = {
   meteor:  { name: "운석", icon: "☄", type: "atk", cast: 3, focus: 2.5, rar: 3, desc: "1.2초 뒤 적 자리에 떨어짐 (피해 70)", fire: (s, me, foe) => EFF.meteor(s, me, foe, wab("meteor")) },
   bees:    { name: "벌떼", icon: "🐝", type: "atk", cast: 3, focus: 2, rar: 3, desc: "쫓아가는 벌 8마리 (독)", fire: (s, me, foe) => EFF.bees(s, me, foe, wab("bees", 1.4)) },
   gatling: { name: "속사포", icon: "🔫", type: "atk", cast: 2.5, focus: 1.5, rar: 3, desc: "이번 전투에서 낸 카드 수만큼 연발 (3.5씩)", fire: (s, me, foe) => { const n = Math.min(20, s.v2.played); for (let i = 0; i < n; i++) wShot(me, wab("gatling"), 3.5, 12, 120, 0, 4, "#ffd27a", i * 4); popS(s, me.x, me.y - me.R - 14, `🔫×${n}`); } },
-  echo:    { name: "메아리", icon: "🪞", type: "atk", cast: 1.5, focus: 1, rar: 3, desc: "직전 공격 카드를 위력 70%로 한 번 더", fire: (s, me, foe) => { const c = s.v2.lastAtk; if (!c) return; const m = me.castMul || 1; me.castMul = m * 0.7; CARDS[c].fire(s, me, foe, 1); me.castMul = m; popS(s, me.x, me.y - me.R - 14, "🪞" + CARDS[c].name); } },
+  echo:    { name: "메아리", icon: "🪞", type: "atk", cast: 1.5, focus: 1, rar: 3, desc: "직전 공격 카드를 위력 70%로 한 번 더", fire: (s, me, foe) => { const c = s.v2.lastAtk; if (!c) return; const m = me.castMul || 1; me.castMul = m * 0.7; CD(c).fire(s, me, foe, 1); me.castMul = m; popS(s, me.x, me.y - me.R - 14, "🪞" + CD(c).name); } },
   // ---- 스킬 ----
-  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "시전 동안 받는 피해 -50% + 보호막 5", fire: (s, me, foe, dur) => { me.guardT = T(dur); me.shieldHp = Math.min(BIG, me.shieldHp + 5); me.shieldT = Math.max(me.shieldT, T(dur)); } },
+  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "시전 동안 받는 피해 -50% + 보호막 5", fire: (s, me, foe, dur, m = 1) => { me.guardT = T(dur); me.shieldHp = Math.min(BIG, me.shieldHp + 5 * m); me.shieldT = Math.max(me.shieldT, T(dur)); } },
   ghost:   { name: "유령화", icon: "👻", type: "skill", cast: 1.5, focus: 0, rar: 3, desc: "시전 동안 모든 공격을 피함", fire: (s, me, foe, dur) => { me.invulnT = Math.max(me.invulnT, T(dur)); } },
-  buffer:  { name: "완충", icon: "🔰", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 직접 공격 1번을 완전히 막음", fire: (s, me) => { me.blockN = (me.blockN || 0) + 1; } },
+  buffer:  { name: "완충", icon: "🔰", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 직접 공격 1번을 완전히 막음", fire: (s, me, foe, dur, m = 1) => { me.blockN = (me.blockN || 0) + (m > 1 ? 2 : 1); } },
   evade:   { name: "회피", icon: "💨", type: "skill", cast: 1, focus: 0, rar: 1, desc: "적 반대쪽으로 빠르게 물러남", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(me.y - foe.y, me.x - foe.x); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.4); me.dashMult = 3; } },
-  aid:     { name: "응급 처치", icon: "✚", type: "skill", cast: 3, focus: 2.5, rar: 1, desc: "체력 12% 회복", fire: (s, me) => { const h = me.maxHp * 0.12; me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "✚" + fmt(h)); } },
-  parry:   { name: "반격", icon: "🤺", type: "skill", cast: 2, focus: 0, rar: 2, desc: "시전 동안 받는 피해 -50%, 때린 적에게 150% 되돌림", fire: (s, me, foe, dur) => { me.parryT = T(dur); me.parryPow = 1.5; } },
-  wall:    { name: "방벽", icon: "🧱", type: "skill", cast: 2.5, focus: 1.5, rar: 1, desc: "보호막 18 (5초)", fire: (s, me) => { me.shieldHp = Math.min(BIG, me.shieldHp + 18); me.shieldT = Math.max(me.shieldT, T(5)); } },
+  aid:     { name: "응급 처치", icon: "✚", type: "skill", cast: 3, focus: 2.5, rar: 1, desc: "체력 12% 회복", fire: (s, me, foe, dur, m = 1) => { const h = me.maxHp * 0.12 * m; me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "✚" + fmt(h)); } },
+  parry:   { name: "반격", icon: "🤺", type: "skill", cast: 2, focus: 0, rar: 2, desc: "시전 동안 받는 피해 -50%, 때린 적에게 150% 되돌림", fire: (s, me, foe, dur, m = 1) => { me.parryT = T(dur); me.parryPow = 1.5 * m; } },
+  wall:    { name: "방벽", icon: "🧱", type: "skill", cast: 2.5, focus: 1.5, rar: 1, desc: "보호막 18 (5초)", fire: (s, me, foe, dur, m = 1) => { me.shieldHp = Math.min(BIG, me.shieldHp + 18 * m); me.shieldT = Math.max(me.shieldT, T(5)); } },
   // ---- 파워 (이번 전투 내내, 한 번 쓰면 이번 전투에서 사라짐) ----
-  might:   { name: "근력", icon: "💪", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 공격력 +25%", fire: (s, me) => { me.atkBonus += 0.25; } },
-  iron:    { name: "철갑", icon: "🪨", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 받는 피해 -25%", fire: (s, me) => { me.dmgMul = (me.dmgMul || 1) * 0.75; } },
-  calm:    { name: "평정", icon: "🧘", type: "power", cast: 3.5, focus: 3, rar: 3, desc: "다음 라운드부터 정신집중 시간 -30%", fire: (s) => { s.v2.focusMul *= 0.7; } },
-  thorn:   { name: "가시 갑옷", icon: "🌵", type: "power", cast: 3, focus: 2.5, rar: 1, desc: "나를 때린 적에게 피해 4", fire: (s, me) => { me.fx.thorns = (me.fx.thorns || 0) + 4; } },
-  regen:   { name: "재생", icon: "🌱", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 매초 체력 1.5 회복", fire: (s, me) => { me.regenV2 = (me.regenV2 || 0) + 1.5; } },
-  orbs:    { name: "궤도 구슬", icon: "🔮", type: "power", cast: 3, focus: 2, rar: 2, desc: "내 주위를 도는 구슬 +2 (닿으면 6)", fire: (s, me, foe) => { EFF.orbs(s, me, foe, wab("orbs")); EFF.orbs(s, me, foe, wab("orbs")); } }
+  might:   { name: "근력", icon: "💪", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 공격력 +25%", fire: (s, me, foe, dur, m = 1) => { me.atkBonus += 0.25 * m; } },
+  iron:    { name: "철갑", icon: "🪨", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 받는 피해 -25%", fire: (s, me, foe, dur, m = 1) => { me.dmgMul = (me.dmgMul || 1) * Math.pow(0.75, m); } },
+  calm:    { name: "평정", icon: "🧘", type: "power", cast: 3.5, focus: 3, rar: 3, desc: "다음 라운드부터 정신집중 시간 -30%", fire: (s, me, foe, dur, m = 1) => { s.v2.focusMul *= Math.pow(0.7, m); } },
+  thorn:   { name: "가시 갑옷", icon: "🌵", type: "power", cast: 3, focus: 2.5, rar: 1, desc: "나를 때린 적에게 피해 4", fire: (s, me, foe, dur, m = 1) => { me.fx.thorns = (me.fx.thorns || 0) + 4 * m; } },
+  regen:   { name: "재생", icon: "🌱", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 매초 체력 1.5 회복", fire: (s, me, foe, dur, m = 1) => { me.regenV2 = (me.regenV2 || 0) + 1.5 * m; } },
+  orbs:    { name: "궤도 구슬", icon: "🔮", type: "power", cast: 3, focus: 2, rar: 2, desc: "내 주위를 도는 구슬 +2 (닿으면 6)", fire: (s, me, foe, dur, m = 1) => { for (let i = 0; i < (m > 1 ? 3 : 2); i++) EFF.orbs(s, me, foe, wab("orbs")); } }
 };
 const START_CARDS = ["club", "club", "club", "club", "guard", "guard", "guard", "guard"];   // 약한 시작 덱
-const cardLabel = id => `${CARDS[id].icon} ${CARDS[id].name}`;
+// ===== 카드 강화 (데모 v2.1): 키 끝에 "+" = 강화 카드. 정신집중 -0.5초(시전도 그만큼 짧아짐), 효과 ×1.35 =====
+const UP_MUL = 1.35, CD_CACHE = {};
+function CD(k){
+  if (!k.endsWith("+")) return CARDS[k];
+  if (CD_CACHE[k]) return CD_CACHE[k];
+  const b = CARDS[k.slice(0, -1)], cut = Math.min(0.5, b.focus);
+  return CD_CACHE[k] = { ...b, name: b.name + "+", up: true, cast: +(b.cast - cut).toFixed(2), focus: +(b.focus - cut).toFixed(2),
+    fire: (s, me, foe, dur) => { const m0 = me.castMul || 1; me.castMul = m0 * UP_MUL; b.fire(s, me, foe, dur, UP_MUL); me.castMul = m0; } };
+}
+const upText = k => { const b = CARDS[k], cut = Math.min(0.5, b.focus); return `${cut ? `시전·집중 -${cut}초, ` : ""}효과 ×${UP_MUL}`; };
+const cardLabel = id => `${CD(id).icon} ${CD(id).name}`;
 
 // ===== 적 패턴 (타임라인) =====  [초, 스킬]. 패턴 길이 len 이후는 더미 타임
 const V2PAT = {
@@ -3070,7 +3080,7 @@ makeEnemy = function(f, typeId, form, kind, rng){ const e = makeEnemy0(f, typeId
 for (const id of ["jailer", "clock", "wraith"]){ const k = ETYPE_IDS.indexOf(id); if (k >= 0) ETYPE_IDS.splice(k, 1); }
 
 const newRun0 = newRun;
-newRun = function(seed){ const r = newRun0(seed); r.deck = []; r.cards = START_CARDS.map(id => ({ uid: r.uid++, id })); r.v2 = true; return r; };
+newRun = function(seed){ const r = newRun0(seed); r.maxHp = r.hp = 260; r.deck = []; r.cards = START_CARDS.map(id => ({ uid: r.uid++, id })); r.v2 = true; return r; };
 saveGame = function(where){ try { if (!runState) return; localStorage.setItem(V2_SAVE, JSON.stringify({ v: 2, where, r: runState }, (k, v) => k === "rng" ? undefined : v)); } catch (e) {} };
 loadGame = function(){ try { const d = JSON.parse(localStorage.getItem(V2_SAVE) || "null"); if (!d || !d.r || !d.r.cards) return null; const r = d.r; r.rng = rngOf(r); r.slots = r.decks[0].slots; return { r, where: d.where === "route" ? "route" : "prep" }; } catch (e) { return null; } };
 clearSave = function(){ try { localStorage.removeItem(V2_SAVE); } catch (e) {} };
@@ -3095,12 +3105,12 @@ function v2PrepRound(s){
   let sum = 0;
   while (sum <= L){
     if (!V.draw.length){ if (!V.disc.length) break; V.draw = v2Shuffle(V.disc.splice(0), s.rng); }
-    const id = V.draw.pop(); V.hand.push(id); sum += CARDS[id].cast;
+    const id = V.draw.pop(); V.hand.push(id); sum += CD(id).cast;
   }
   s.rdPlan = { en, L };
 }
 function v2Timeline(s){   // 지금 손패 순서대로 시작·집중 끝·끝 시각
-  let t = 0; return s.v2.hand.map((id, i) => { const c = CARDS[id], st = t; t += c.cast; return { i, id, start: st, fEnd: st + c.focus * s.v2.focusMul, end: t }; });
+  let t = 0; return s.v2.hand.map((id, i) => { const c = CD(id), st = t; t += c.cast; return { i, id, start: st, fEnd: st + c.focus * s.v2.focusMul, end: t }; });
 }
 function v2Execute(s){
   const plan = v2Timeline(s), sum = plan.length ? plan[plan.length - 1].end : 0;
@@ -3113,10 +3123,10 @@ function v2Tick(s){
   rd.cur = cur;
   P.focus = !!(cur && !cur.fizzled && !cur.fired && rt < cur.fEnd && P.hp > 0);
   if (cur && !cur.fired && !cur.fizzled && rt >= cur.fEnd){
-    cur.fired = true; const C = CARDS[cur.id], foe = other(s, P);
-    P.castMul = 1; if (P.nextBoost && C.type === "atk" && cur.id !== "gamble"){ P.castMul = P.nextBoost; P.nextBoost = 0; popS(s, P.x, P.y - P.R - 30, "🎲×2!"); }   // 도박 6: 다음 공격 ×2
+    cur.fired = true; const C = CD(cur.id), foe = other(s, P);
+    P.castMul = 1; if (P.nextBoost && C.type === "atk" && !cur.id.startsWith("gamble")){ P.castMul = P.nextBoost; P.nextBoost = 0; popS(s, P.x, P.y - P.R - 30, "🎲×2!"); }   // 도박 6: 다음 공격 ×2
     C.fire(s, P, foe, Math.max(0.2, cur.end - rt)); V.played++; P.castMul = 1;
-    if (C.type === "atk" && cur.id !== "echo") V.lastAtk = cur.id;
+    if (C.type === "atk" && !cur.id.startsWith("echo")) V.lastAtk = cur.id;
     popS(s, P.x, P.y - P.R - 22, C.icon + C.name);
   }
   if (P.guardT > 0) P.guardT--;
@@ -3127,7 +3137,7 @@ function v2Tick(s){
     if (!e.onFizzle) e.onFizzle = () => { const v = E.cur; if (v && e.focus){ v.fizzled = true; e.focus = false; popS(s, e.x, e.y - e.R - 14, "😵좌절"); } };
     for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; if (!ev.fizzled){ e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast" }); } } }
   if (rt >= rd.T){ rd.over = true; P.focus = false; for (const E of rd.en) E.ball.focus = false;
-    for (const c of rd.plan) (CARDS[c.id].type === "power" ? null : V.disc.push(c.id));   // 파워는 이번 전투에서 사라짐
+    for (const c of rd.plan) (CD(c.id).type === "power" ? null : V.disc.push(c.id));   // 파워는 이번 전투에서 사라짐
     V.hand = []; }
 }
 const step0 = step;
@@ -3143,7 +3153,7 @@ function drawV2(c, s){
     c.fillStyle = "rgba(255,255,255,.12)"; c.fillRect(0, H - 6, W, 6); c.fillStyle = "#ffe066"; c.fillRect(0, H - 6, W * Math.min(1, rt / rd.T), 6);
     if (rt > rd.L){ c.fillStyle = "#99a"; c.font = "11px system-ui"; c.textAlign = "center"; c.fillText("더미 타임", W / 2, H - 10); }
     const cur = rd.cur;
-    if (cur && !P.dead){ const C = CARDS[cur.id];
+    if (cur && !P.dead){ const C = CD(cur.id);
       if (P.focus){ const p = (rt - cur.start) / Math.max(0.01, cur.fEnd - cur.start); c.beginPath(); c.arc(P.x, P.y, P.R + 6, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#7fd8ff"; c.lineWidth = 4; c.stroke(); }
       c.fillStyle = cur.fizzled ? "#ff8080" : "#fff3b0"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText((P.focus ? "🧘" : "") + C.name + (cur.fizzled ? " ✗" : ""), P.x, P.y - P.R - 10); }
     for (const E of rd.en){ const e = E.ball; if (e.dead) continue; const nx = E.evs.find(v => !v.done && !v.fizzled);
@@ -3163,22 +3173,22 @@ startBattle = function(){
 // 적 행동 종류(색으로만 구분): 공격 빨강 / 스킬 파랑 / 파워 보라
 const ENEMY_POWER = ["ritual", "atk", "accel"], ENEMY_ATK_EXTRA = ["quake", "charge"];
 const actType = sk => ENEMY_POWER.includes(sk) ? "power" : (SKILL[sk] && SKILL[sk].g === "공격") || ENEMY_ATK_EXTRA.includes(sk) ? "atk" : "skill";
-function v2Placed(s){ let t = 0; return s.v2.placed.map((hi, k) => { const C = CARDS[s.v2.hand[hi]], st = t; t += C.cast; return { k, hi, id: s.v2.hand[hi], start: st, end: t }; }); }
+function v2Placed(s){ let t = 0; return s.v2.placed.map((hi, k) => { const C = CD(s.v2.hand[hi]), st = t; t += C.cast; return { k, hi, id: s.v2.hand[hi], start: st, end: t }; }); }
 let planInfo = "";
 function renderPlan(){
   const s = state; if (!s) return; const V = s.v2;
   if (!s.planning){ v2PrepRound(s); s.rd = null; s.planning = true; V.placed = []; V.anim = true; planInfo = ""; }   // 라운드마다 한 번만 뽑음
   phase = "plan"; panel.classList.add("plan");
-  const tl = v2Placed(s), sumAll = V.hand.reduce((a, id) => a + CARDS[id].cast, 0), sumP = tl.length ? tl[tl.length - 1].end : 0;
+  const tl = v2Placed(s), sumAll = V.hand.reduce((a, id) => a + CD(id).cast, 0), sumP = tl.length ? tl[tl.length - 1].end : 0;
   const L = s.rdPlan.L, T = Math.max(L, sumAll), pct = t => (t / T * 100).toFixed(2) + "%", all = V.placed.length === V.hand.length;
   let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
   const enemyRows = s.rdPlan.en.map((E, ei) => `<div class="tlrow"><div class="tlname en" data-en="${ei}">${E.ball.icon}</div><div class="tlbar">
       <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
       ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-en="${ei}" data-ev="${vi}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b></div>`).join("")}</div></div>`).join("");
-  const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CARDS[c.id];
+  const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CD(c.id);
       return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.cast}초</small></span></div>`; }).join("")}
       ${sumAll > 0 ? `<div class="tlghost" style="left:${pct(sumP)};width:${pct(Math.max(0, sumAll - sumP))}"></div>` : ""}<div class="tldrop" id="tldrop"></div></div></div>`;
-  const hand = V.hand.map((id, hi) => { const C = CARDS[id], used = V.placed.includes(hi);
+  const hand = V.hand.map((id, hi) => { const C = CD(id), used = V.placed.includes(hi);
     return `<div class="hcard ${C.type}${used ? " used" : ""}${V.anim ? " drawin" : ""}" data-hi="${hi}" style="${V.anim ? `animation-delay:${(hi * 0.13).toFixed(2)}s` : ""}"><div class="hic">${C.icon}</div><div class="hnm">${C.name}</div><div class="hct">${C.cast}초</div></div>`; }).join("");
   panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 내 패 ${sumAll.toFixed(1)}초${sumAll > L ? ` (더미 ${(sumAll - L).toFixed(1)}초)` : ""}</div>
     <div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}</div></div>${enemyRows}${myRow}</div>
@@ -3186,7 +3196,7 @@ function renderPlan(){
     <div class="small pinfo" id="pinfo">${planInfo || "패를 누른 순서대로 타임라인에 올라가요 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 끌면 자리 이동 · 적 아이콘·행동을 누르면 적 정보"}</div>
     <div class="row" style="gap:6px"><button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : `패를 모두 올려 주세요 ${V.placed.length}/${V.hand.length}`}</button></div></div>`;
   V.anim = false;
-  const showInfo = id => { const C = CARDS[id]; planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
+  const showInfo = id => { const C = CD(id); planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
   // 누르기/꾹 누르기/끌기 판별
   const press = (el, onTap, onHold, onDrag) => el.onpointerdown = e => {
     e.preventDefault(); const x0 = e.clientX, y0 = e.clientY; let held = false, drag = false;
@@ -3218,7 +3228,7 @@ function renderPlan(){
 function renderSidesV2(){
   const s = state; if (!s) return;
   const tl = s.rd && !s.rd.over ? s.rd.plan : v2Placed(s);
-  leftBody().innerHTML = `<div class="sideh">🃏 이번 라운드</div>` + tl.map((c, i) => { const C = CARDS[c.id]; return `<div class="card sentc v2c ${C.type}" id="v2c${i}"><span>${C.icon} ${C.name}</span><span class="cnt">${C.cast}초</span></div>`; }).join("");
+  leftBody().innerHTML = `<div class="sideh">🃏 이번 라운드</div>` + tl.map((c, i) => { const C = CD(c.id); return `<div class="card sentc v2c ${C.type}" id="v2c${i}"><span>${C.icon} ${C.name}</span><span class="cnt">${C.cast}초</span></div>`; }).join("");
   const en = s.rd && !s.rd.over ? s.rd.en : (s.rdPlan ? s.rdPlan.en : []);
   rightEl().innerHTML = `<div class="sideh">적 패턴</div>` + en.map((E, ei) => `<div class="ecard"><div class="lab"><b style="color:#fff">${E.ball.icon} ${E.ball.name}</b><span id="v2hp${ei}">❤${fmt(Math.max(0, E.ball.hp))}/${fmt(E.ball.maxHp)}</span></div>${E.ball.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[E.ball.trait] || ""}</div>` : ""}
     ${E.evs.map((v, vi) => `<div class="card sentc ev2 ${actType(v.sk)}" id="v2e${ei}_${vi}" style="padding:3px 6px"><span class="small">${(v.t - v.f).toFixed(1)}~${v.t}초 · ${SK_LABEL(v.sk)}</span></div>`).join("")}</div>`).join("");
@@ -3232,8 +3242,8 @@ updateBattleUi = function(){
   s.flash.splice(0);
 };
 // 보상: 카드 3장 중 1장 (또는 건너뛰기)
-function pickCards(r, n){ const ids = Object.keys(CARDS).filter(id => CARDS[id].rar > 0); return pickDistinct(ids, id => RAR_W[CARDS[id].rar] * (isAct1(r) && CARDS[id].rar === 3 ? 0.5 : 1), n, r.rng); }
-function cardTile(id, attrs){ const C = CARDS[id]; return `<button class="ccard ${C.type} r${C.rar}" ${attrs}><div class="cic">${C.icon}</div><div class="cnm">${C.name}</div><div class="cty">${CARD_TYPE[C.type].name} · ${C.cast}초${C.focus ? ` (집중 ${C.focus})` : ""}</div><div class="cds">${C.desc}</div></button>`; }
+function pickCards(r, n){ const ids = Object.keys(CARDS).filter(id => CARDS[id].rar > 0); return pickDistinct(ids, id => RAR_W[CD(id).rar] * (isAct1(r) && CD(id).rar === 3 ? 0.5 : 1), n, r.rng); }
+function cardTile(id, attrs){ const C = CD(id); return `<button class="ccard ${C.type} r${C.rar}" ${attrs}><div class="cic">${C.icon}</div><div class="cnm">${C.name}</div><div class="cty">${CARD_TYPE[C.type].name} · ${C.cast}초${C.focus ? ` (집중 ${C.focus})` : ""}</div><div class="cds">${C.desc}</div></button>`; }
 function renderCardReward(lines, next){
   phase = "reward"; const r = runState; if (!r.cardRw) r.cardRw = pickCards(r, 3);
   panel.innerHTML = `<div class="mbox wide"><div class="mtitle">카드 보상</div><div class="small" style="text-align:center">${lines.join("<br>")}</div>
@@ -3258,7 +3268,7 @@ const chooseRoute0 = chooseRoute;
 chooseRoute = function(i){ const r = runState, o = r.routes[i];
   if (o.type === "shop" || o.type === "forge" || o.type === "event"){ r.routes = null; renderCardReward(["🎁 길에서 카드를 발견했어요"], () => finishRest("카드를 챙겼어요")); return; }
   chooseRoute0(i); };
-renderOver = (function(f){ return function(cleared, lines){ const r = runState; f(cleared, lines); const m = panel.querySelector(".msg"); if (m && r && r.cards) m.innerHTML += `<br>내 카드: ${r.cards.map(c => CARDS[c.id].icon + CARDS[c.id].name).join(", ")}`; }; })(renderOver);
+renderOver = (function(f){ return function(cleared, lines){ const r = runState; f(cleared, lines); const m = panel.querySelector(".msg"); if (m && r && r.cards) m.innerHTML += `<br>내 카드: ${r.cards.map(c => CD(c.id).icon + CD(c.id).name).join(", ")}`; }; })(renderOver);
 openDeck = function(){
   const r = runState; if (!r) return; const cnt = {}; for (const c of r.cards) cnt[c.id] = (cnt[c.id] || 0) + 1;
   const s = state && state.v2 ? state.v2 : null;
@@ -3305,6 +3315,108 @@ document.getElementById("bBook").style.display = "none";
   .v2c{display:flex;justify-content:space-between;align-items:center;padding:5px 8px;font-size:12px}.v2c.atk{border-color:#c84a4a}.v2c.skill{border-color:#3a8ac8}.v2c.power{border-color:#a060e8}
 `; document.head.appendChild(st); }
 document.title = "볼배틀 탑 v2 (카드)";
+
+// ===================== v2.1: 레벨업·경험치·주사위 삭제 + 덱 관리(대장간·상점·휴식) =====================
+// v2에서 의미 없는 유물(문장·검사·레벨업 관련) 빼기
+for (const id of ["veil", "veil2", "book", "hourglass", "bookmark", "secondhand", "gear", "bluelens", "bell", "dicebox", "shackle", "alchemy", "grail"]) delete RELIC[id];
+// 승리 정산: 골드·회복·물약만 (경험치·레벨업 없음)
+winFloor = function(r, s, kind){
+  dropTemps(r);
+  const fx = relicFx(r), f = r.floor, mul = kind === "elite" ? 1.5 : kind === "boss" ? 2.5 : 1, gold = Math.round((15 + absFloor(f) * 4) * mul * fx.goldMul), out = { gold, rolls: [] };
+  if (s.reviveUsed){ const ph = r.relics.find(x => x.id === "phoenix" && !x.used); if (ph) ph.used = true; }
+  r.hp = clamp(Math.round(Math.max(1, s.balls[0].hp)), 1, r.maxHp); r.gold += gold;
+  const heal = Math.max(0, Math.round(r.maxHp * (POST_FIGHT_HEAL + fx.healAfter))); r.hp = Math.min(r.maxHp, r.hp + heal); out.heal = heal;
+  r.floor++; r.retry = 0; out.potion = rollPotionDrop(r, kind);
+  return out;
+};
+onBattleEnd = function(){
+  const r = runState, w = state.winner;
+  skipBtn.disabled = true; pauseBtn.disabled = true; paused = false; potionsEl.innerHTML = ""; panel.classList.remove("plan");
+  if (w === -1){ r.retry++; renderPrep(); return; }
+  if (w === 1){ phase = "over"; renderOver(false); return; }
+  const wasFloor = r.floor, kind = r.encKind, res = winFloor(r, state, kind);
+  updateHud();
+  const lines = [`💰 +${res.gold}${res.heal ? ` · ❤ +${res.heal}` : ""}`];
+  if (res.potion) lines.push(res.potion.kept ? `🧪 ${POTION[res.potion.id].icon} ${POTION[res.potion.id].name}` : `🧪 물약 칸이 가득 참`);
+  if (wasFloor === TOP_FLOOR){ phase = "over"; renderOver(true, lines); return; }
+  const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
+  renderCardReward(lines, done);
+};
+updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
+infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
+document.getElementById("bDice").style.display = "none";
+
+// ----- 카드 고르기 화면 (지우기·강화 공용) -----
+function cardTileK(k, attrs, extra){ const C = CD(k); return `<button class="ccard ${C.type} r${C.rar}${C.up ? " up" : ""}" ${attrs}><div class="cic">${C.icon}</div><div class="cnm">${C.name}</div><div class="cty">${CARD_TYPE[C.type].name} · ${C.cast}초${C.focus ? ` (집중 ${C.focus})` : ""}</div><div class="cds">${C.desc}</div>${extra || ""}</button>`; }
+cardTile = function(id, attrs){ return cardTileK(id, attrs); };
+function renderCardPick(title, filter, onPick, onBack, extraOf){
+  const r = runState, list = r.cards.map((c, i) => [c, i]).filter(([c]) => !filter || filter(c));
+  panel.innerHTML = `<div class="counter forgec"><b>${title}</b></div><div class="crow wrap">${list.map(([c, i]) => cardTileK(c.id, `data-pk="${i}"`, extraOf ? extraOf(c) : "")).join("") || `<div class="small">고를 카드가 없어요</div>`}</div><button class="main" id="pkback">뒤로</button>`;
+  panel.querySelectorAll("[data-pk]").forEach(b => b.onclick = () => onPick(+b.dataset.pk));
+  document.getElementById("pkback").onclick = onBack;
+}
+const canUp = c => !c.id.endsWith("+");
+const upCard = (r, i) => { r.cards[i].id = r.cards[i].id + "+"; };
+// ----- 휴식: 회복 30% 또는 카드 1장 강화 -----
+renderRest = function(wasHidden){
+  phase = "rest"; const r = runState; updateHud();
+  panel.innerHTML = `<div class="counter forgec"><b>🛏 휴식</b><span>❤${fmt(r.hp)}/${fmt(r.maxHp)}</span></div><div class="tiles big" style="grid-template-columns:repeat(2,1fr)">
+    <button class="tile forge" id="rs1"><div class="ic">🛏</div><div class="nm">쉬기</div><div class="sb">체력 30% 회복</div></button>
+    <button class="tile forge" id="rs2"><div class="ic">⚒️</div><div class="nm">수련</div><div class="sb">카드 1장 강화</div></button></div>`;
+  document.getElementById("rs1").onclick = () => { const h = Math.round(r.maxHp * 0.3); r.hp = Math.min(r.maxHp, r.hp + h); finishRest(`체력 ${h} 회복`); };
+  document.getElementById("rs2").onclick = () => renderCardPick("⚒️ 강화할 카드", canUp, i => { const nm = CD(r.cards[i].id).name; upCard(r, i); finishRest(`${nm} → ${CD(r.cards[i].id).name}`); }, () => renderRest(wasHidden), c => `<div class="cup">→ ${upText(c.id)}</div>`);
+};
+// ----- 대장간: 강화 또는 지우기 중 하나 (무료) -----
+function renderForgeV2(){
+  phase = "forge"; const r = runState; updateHud();
+  panel.innerHTML = `<div class="counter forgec"><b>🔨 대장간</b><span class="cnote">하나만 고를 수 있어요</span></div><div class="tiles big" style="grid-template-columns:repeat(2,1fr)">
+    <button class="tile forge" id="fv1"><div class="ic">⚒️</div><div class="nm">모루</div><div class="sb">카드 1장 강화</div></button>
+    <button class="tile forge" id="fv2"><div class="ic">✂️</div><div class="nm">숫돌</div><div class="sb">카드 1장 지우기</div></button></div><button class="main" id="lv">그냥 나가기</button>`;
+  document.getElementById("fv1").onclick = () => renderCardPick("⚒️ 강화할 카드", canUp, i => { const nm = CD(r.cards[i].id).name; upCard(r, i); finishRest(`${nm} → ${CD(r.cards[i].id).name}`); }, renderForgeV2, c => `<div class="cup">→ ${upText(c.id)}</div>`);
+  document.getElementById("fv2").onclick = () => renderCardPick("✂️ 지울 카드", r.cards.length > 1 ? null : () => false, i => { const nm = CD(r.cards[i].id).name; r.cards.splice(i, 1); finishRest(`${nm} 지움`); }, renderForgeV2);
+  document.getElementById("lv").onclick = () => finishRest("대장간을 나왔어요");
+}
+// ----- 상점: 카드 5장(하나는 반값) · 카드 지우기 · 유물 2 · 물약 2 -----
+const CARD_PRICE = { 1: 50, 2: 75, 3: 140 };
+function genShopV2(r){
+  const sm = relicFx(r).shopMul, sp = p => Math.max(1, Math.round(p * sm)), items = [];
+  const cs = pickCards(r, 5), sale = Math.floor(r.rng() * 5);
+  cs.forEach((id, i) => items.push({ type: "card", id, price: sp(CARD_PRICE[CARDS[id].rar] * (i === sale ? 0.5 : 1) * (0.9 + r.rng() * 0.2)), sale: i === sale }));
+  items.push({ type: "cremove", price: sp(75 + 25 * (r.removes || 0)) });
+  const used = [];
+  for (let i = 0; i < 2; i++){ const id = pickByTier(Object.keys(RELIC).filter(x => !r.relics.some(o => o.id === x) && !used.includes(x) && RELIC[x].tier !== "k"), x => RELIC[x].tier, TIER_W.normal, r.rng); if (id){ used.push(id); items.push({ type: "relic", id, price: sp(PRICE.relic[RELIC[id].tier]) }); } }
+  for (let i = 0; i < 2; i++){ const id = pickPotionId(r); items.push({ type: "potion", id, price: sp(PRICE.potion[POTION[id].tier]) }); }
+  return items;
+}
+function renderShopV2(note){
+  phase = "shop"; const r = runState; updateHud();
+  const it = r.shop;
+  const cards = it.map((x, i) => [x, i]).filter(([x]) => x.type === "card"), others = it.map((x, i) => [x, i]).filter(([x]) => x.type !== "card");
+  const price = x => x.sold ? "판매 완료" : `💰 ${x.price}${x.sale ? " 🔖세일" : ""}`;
+  panel.innerHTML = `<div class="counter shopc"><b>🛒 상점</b><span>💰 ${r.gold}</span>${note ? `<span class="cnote">${note}</span>` : ""}</div>
+    <div class="shelf"><div class="shelfh">🃏 카드</div><div class="crow wrap">${cards.map(([x, i]) => cardTileK(x.id, `data-si="${i}" ${x.sold ? "disabled" : ""}`, `<div class="cpr">${price(x)}</div>`)).join("")}</div></div>
+    <div class="shelf"><div class="shelfh">🏺 유물 · 🧪 물약 · ✂ 서비스</div><div class="tiles">${others.map(([x, i]) => { const ic = x.type === "relic" ? RELIC[x.id].icon : x.type === "potion" ? POTION[x.id].icon : "✂";
+      const nm = x.type === "relic" ? RELIC[x.id].name + tierTag(RELIC[x.id].tier) : x.type === "potion" ? POTION[x.id].name + tierTag(POTION[x.id].tier) : "카드 지우기";
+      const sb = x.type === "relic" ? RELIC[x.id].desc : x.type === "potion" ? POTION[x.id].desc : "덱에서 카드 1장 빼기";
+      return `<button class="tile shop${x.sold ? " sold" : ""}" data-si="${i}" ${x.sold ? "disabled" : ""}><div class="ic">${ic}</div><div class="nm">${nm}</div><div class="sb">${sb}</div><div class="pr">${price(x)}</div></button>`; }).join("")}</div></div>
+    <button class="main" id="lv">나가기</button>`;
+  panel.querySelectorAll("[data-si]").forEach(b => b.onclick = () => { const x = it[+b.dataset.si]; if (x.sold) return; if (r.gold < x.price) return renderShopV2("골드가 부족해요");
+    if (x.type === "card"){ r.gold -= x.price; x.sold = true; r.cards.push({ uid: r.uid++, id: x.id }); return renderShopV2(`${CD(x.id).name} 구매`); }
+    if (x.type === "cremove") return renderCardPick("✂️ 지울 카드 (💰" + x.price + ")", r.cards.length > 1 ? null : () => false, i => { const nm = CD(r.cards[i].id).name; r.cards.splice(i, 1); r.gold -= x.price; x.sold = true; r.removes = (r.removes || 0) + 1; renderShopV2(`${nm} 지움`); }, () => renderShopV2());
+    const e = buyItem(r, x); renderShopV2(e || ""); });
+  document.getElementById("lv").onclick = () => finishRest("상점을 나왔어요");
+}
+chooseRoute = function(i){ const r = runState, o = r.routes[i];
+  if (o.type === "shop"){ r.routes = null; r.shop = genShopV2(r); renderShopV2(); return; }
+  if (o.type === "forge"){ r.routes = null; renderForgeV2(); return; }
+  if (o.type === "event"){ r.routes = null; renderCardReward(["🎁 길에서 카드를 발견했어요"], () => finishRest("카드를 챙겼어요")); return; }
+  chooseRoute0(i); };
+{ const st = document.createElement("style"); st.textContent = `
+  .ccard.up .cnm{color:#9cff9c}.ccard .cup{font-size:11px;color:#9cff9c;margin-top:2px}.ccard .cpr{font-size:13px;font-weight:bold;color:#ffe066;margin-top:auto}
+  .ccard:disabled{opacity:.4}.hcard .hnm{white-space:nowrap}`; document.head.appendChild(st); }
+
+// v2 난이도: 레벨업이 없어 플레이어가 안 크므로 적 성장을 줄이고 시작 체력을 늘림 (봇 측정 기준)
+ENEMY_ATK0 = 5; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;
 
 { const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
 requestAnimationFrame(loop);
