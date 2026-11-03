@@ -3156,36 +3156,62 @@ startBattle = function(){
   paused = false; pauseBtn.disabled = false; pauseBtn.textContent = "⏸"; renderPotions(); updateHud(); closeInfo();
   renderPlan();
 };
-let planSel = -1;
+// 적 행동 종류(색으로만 구분): 공격 빨강 / 스킬 파랑 / 파워 보라
+const ENEMY_POWER = ["ritual", "atk", "accel"], ENEMY_ATK_EXTRA = ["quake", "charge"];
+const actType = sk => ENEMY_POWER.includes(sk) ? "power" : (SKILL[sk] && SKILL[sk].g === "공격") || ENEMY_ATK_EXTRA.includes(sk) ? "atk" : "skill";
+function v2Placed(s){ let t = 0; return s.v2.placed.map((hi, k) => { const C = CARDS[s.v2.hand[hi]], st = t; t += C.cast; return { k, hi, id: s.v2.hand[hi], start: st, end: t }; }); }
+let planInfo = "";
 function renderPlan(){
-  const s = state; if (!s) return;
-  if (!s.planning){ v2PrepRound(s); s.rd = null; planSel = -1; s.planning = true; }   // 라운드마다 한 번만 뽑음
+  const s = state; if (!s) return; const V = s.v2;
+  if (!s.planning){ v2PrepRound(s); s.rd = null; s.planning = true; V.placed = []; V.anim = true; planInfo = ""; }   // 라운드마다 한 번만 뽑음
   phase = "plan"; panel.classList.add("plan");
-  const tl = v2Timeline(s), sum = tl.length ? tl[tl.length - 1].end : 0, L = s.rdPlan.L, T = Math.max(L, sum), pct = t => (t / T * 100).toFixed(2) + "%";
+  const tl = v2Placed(s), sumAll = V.hand.reduce((a, id) => a + CARDS[id].cast, 0), sumP = tl.length ? tl[tl.length - 1].end : 0;
+  const L = s.rdPlan.L, T = Math.max(L, sumAll), pct = t => (t / T * 100).toFixed(2) + "%", all = V.placed.length === V.hand.length;
   let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
   const enemyRows = s.rdPlan.en.map(E => `<div class="tlrow"><div class="tlname">${E.ball.icon}</div><div class="tlbar">
       <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
-      ${E.evs.map(v => `<div class="tlev" style="left:${pct(v.t)}"><b>${SK_FULL(v.sk)}</b></div>`).join("")}</div></div>`).join("");
-  const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine">${tl.map(c => { const C = CARDS[c.id];
-      return `<button class="tlcard ${C.type}${planSel === c.i ? " sel" : ""}" data-ci="${c.i}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * s.v2.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.cast}초</small></span></button>`; }).join("")}</div></div>`;
-  const sc = planSel >= 0 ? CARDS[s.v2.hand[planSel]] : null;
-  panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${s.v2.round} · 상대 패턴 ${L}초 · 내 카드 ${sum.toFixed(1)}초${sum > L ? ` (더미 ${(sum - L).toFixed(1)}초)` : ""}</div>
+      ${E.evs.map(v => `<div class="tlev ${actType(v.sk)}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b></div>`).join("")}</div></div>`).join("");
+  const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CARDS[c.id];
+      return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.cast}초</small></span></div>`; }).join("")}
+      ${sumAll > 0 ? `<div class="tlghost" style="left:${pct(sumP)};width:${pct(Math.max(0, sumAll - sumP))}"></div>` : ""}<div class="tldrop" id="tldrop"></div></div></div>`;
+  const hand = V.hand.map((id, hi) => { const C = CARDS[id], used = V.placed.includes(hi);
+    return `<div class="hcard ${C.type}${used ? " used" : ""}${V.anim ? " drawin" : ""}" data-hi="${hi}" style="${V.anim ? `animation-delay:${(hi * 0.13).toFixed(2)}s` : ""}"><div class="hic">${C.icon}</div><div class="hnm">${C.name}</div><div class="hct">${C.cast}초</div></div>`; }).join("");
+  panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 내 패 ${sumAll.toFixed(1)}초${sumAll > L ? ` (더미 ${(sumAll - L).toFixed(1)}초)` : ""}</div>
     <div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}</div></div>${enemyRows}${myRow}</div>
-    <div class="small" style="min-height:2.4em">${sc ? `<b>${sc.icon} ${sc.name}</b> [${CARD_TYPE[sc.type].name}] 시전 ${sc.cast}초 (집중 ${(sc.focus * s.v2.focusMul).toFixed(1)}초) — ${sc.desc} · 다른 카드를 누르면 자리 바꿈` : "카드를 누르고 다른 카드를 누르면 순서가 바뀌어요 · 파란 빗금 = 정신집중(맞으면 좌절)"}</div>
-    <div class="row" style="gap:6px"><span class="small">뽑을 카드 ${s.v2.draw.length} · 버린 카드 ${s.v2.disc.length}</span><button class="main" id="pgo" style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">▶ 실행</button></div></div>`;
-  panel.querySelectorAll(".tlcard").forEach(b => b.onclick = () => { const i = +b.dataset.ci;
-    if (planSel < 0 || planSel === i){ planSel = planSel === i ? -1 : i; } else { const H = s.v2.hand; [H[planSel], H[i]] = [H[i], H[planSel]]; planSel = -1; }
-    renderPlan(); });
-  document.getElementById("pgo").onclick = () => { v2Execute(s); s.planning = false; planSel = -1; panel.classList.remove("plan"); phase = "battle"; last = performance.now(); acc = 0; renderSidesV2(); };
+    <div class="handrow"><div class="pile" title="뽑을 카드">🂠<small>${V.draw.length}</small></div>${hand}<div class="pile disc" title="버린 카드">🗑<small>${V.disc.length}</small></div></div>
+    <div class="small pinfo" id="pinfo">${planInfo || "패를 누른 순서대로 타임라인에 올라가요 · 타임라인 카드를 누르면 패로 돌아옴 · 꾹 누르면 효과 · 타임라인에서 꾹 눌러 끌면 자리 이동"}</div>
+    <div class="row" style="gap:6px"><button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : `패를 모두 올려 주세요 ${V.placed.length}/${V.hand.length}`}</button></div></div>`;
+  V.anim = false;
+  const showInfo = id => { const C = CARDS[id]; planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
+  // 누르기/꾹 누르기/끌기 판별
+  const press = (el, onTap, onHold, onDrag) => el.onpointerdown = e => {
+    e.preventDefault(); const x0 = e.clientX, y0 = e.clientY; let held = false, drag = false;
+    const tm = setTimeout(() => { held = true; onHold(); el.classList.add("held"); }, 320);
+    const mv = ev => { if (!drag && onDrag && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8){ drag = true; clearTimeout(tm); onDrag.start(); } if (drag) onDrag.move(ev); };
+    const up = ev => { clearTimeout(tm); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); el.classList.remove("held");
+      if (drag) onDrag.end(ev); else if (!held) onTap(); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  };
+  panel.querySelectorAll(".hcard").forEach(el => { const hi = +el.dataset.hi;
+    press(el, () => { if (!V.placed.includes(hi)){ V.placed.push(hi); renderPlan(); } }, () => showInfo(V.hand[hi])); });
+  const bar = document.getElementById("tlmine"), drop = document.getElementById("tldrop");
+  panel.querySelectorAll(".tlcard").forEach(el => { const k = +el.dataset.k; let to = k;
+    press(el, () => { V.placed.splice(k, 1); renderPlan(); }, () => showInfo(V.hand[V.placed[k]]), {
+      start: () => el.classList.add("dragging"),
+      move: ev => { const rc = bar.getBoundingClientRect(), tx = (ev.clientX - rc.left) / rc.width * T; el.style.transform = `translateX(${ev.clientX - rc.left - (parseFloat(el.style.left) / 100 * rc.width) - el.offsetWidth / 2}px)`;
+        to = tl.length; for (let q = 0; q < tl.length; q++) if (tx < (tl[q].start + tl[q].end) / 2){ to = q; break; }
+        const at = to < tl.length ? tl[to].start : sumP; drop.style.display = "block"; drop.style.left = pct(at); },
+      end: () => { const P = V.placed, [x] = P.splice(k, 1); P.splice(to > k ? to - 1 : to, 0, x); renderPlan(); } }); });
+  document.getElementById("pgo").onclick = () => { if (!all) return; V.hand = V.placed.map(i => V.hand[i]); V.placed = []; v2Execute(s); s.planning = false; panel.classList.remove("plan"); phase = "battle"; last = performance.now(); acc = 0; renderSidesV2(); };
   renderSidesV2();
 }
 function renderSidesV2(){
   const s = state; if (!s) return;
-  const tl = s.rd && !s.rd.over ? s.rd.plan : v2Timeline(s);
+  const tl = s.rd && !s.rd.over ? s.rd.plan : v2Placed(s);
   leftBody().innerHTML = `<div class="sideh">🃏 이번 라운드</div>` + tl.map((c, i) => { const C = CARDS[c.id]; return `<div class="card sentc v2c ${C.type}" id="v2c${i}"><span>${C.icon} ${C.name}</span><span class="cnt">${C.cast}초</span></div>`; }).join("");
   const en = s.rd && !s.rd.over ? s.rd.en : (s.rdPlan ? s.rdPlan.en : []);
   rightEl().innerHTML = `<div class="sideh">적 패턴</div>` + en.map((E, ei) => `<div class="ecard"><div class="lab"><b style="color:#fff">${E.ball.icon} ${E.ball.name}</b><span id="v2hp${ei}">❤${fmt(Math.max(0, E.ball.hp))}/${fmt(E.ball.maxHp)}</span></div>${E.ball.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[E.ball.trait] || ""}</div>` : ""}
-    ${E.evs.map((v, vi) => `<div class="card sentc" id="v2e${ei}_${vi}" style="padding:3px 6px"><span class="small">${v.t}초 → ${SK_FULL(v.sk)}</span></div>`).join("")}</div>`).join("");
+    ${E.evs.map((v, vi) => `<div class="card sentc ev2 ${actType(v.sk)}" id="v2e${ei}_${vi}" style="padding:3px 6px"><span class="small">${v.t}초 · ${SK_LABEL(v.sk)}</span></div>`).join("")}</div>`).join("");
 }
 updateBattleUi = function(){
   const s = state; if (!s || !s.rd || phase !== "battle") return;
@@ -3250,6 +3276,20 @@ document.getElementById("bBook").style.display = "none";
   .ccard.atk{border-color:#c84a4a;background:linear-gradient(#4a2020,#2a1414)}.ccard.skill{border-color:#3a8ac8;background:linear-gradient(#1d3a55,#122436)}.ccard.power{border-color:#a060e8;background:linear-gradient(#3a2458,#22143a)}
   .ccard.r2{box-shadow:0 0 6px rgba(80,160,255,.5)}.ccard.r3{box-shadow:0 0 10px rgba(255,176,48,.75)}
   .ccard .cic{font-size:30px}.ccard .cnm{font-weight:bold;font-size:14px}.ccard .cty{font-size:10px;color:#ccd}.ccard .cds{font-size:11px;color:#eee}.ccard .ccnt{position:absolute;top:4px;right:8px;font-weight:bold;color:#ffe066}
+  .tlev{border-left-width:4px}.tlev.atk{border-color:#ff5050;color:#ffb8b8;background:linear-gradient(90deg,rgba(255,80,80,.28),transparent 70%)}
+  .tlev.skill{border-color:#4aa8ff;color:#b8dcff;background:linear-gradient(90deg,rgba(74,168,255,.28),transparent 70%)}.tlev.power{border-color:#b070ff;color:#e0c8ff;background:linear-gradient(90deg,rgba(176,112,255,.3),transparent 70%)}
+  .ev2.atk{border-color:#c84a4a}.ev2.skill{border-color:#3a8ac8}.ev2.power{border-color:#a060e8}
+  .tlcard{touch-action:none;cursor:grab;user-select:none}.tlcard.dragging{opacity:.75;z-index:5;box-shadow:0 4px 12px rgba(0,0,0,.6)}.tlcard.held,.hcard.held{outline:2px solid #ffe066}
+  .tlghost{position:absolute;top:2px;bottom:2px;border:2px dashed #556;border-radius:6px}
+  .tldrop{position:absolute;top:-3px;bottom:-3px;width:3px;margin-left:-1px;background:#ffe066;display:none;z-index:6}
+  .handrow{display:flex;gap:6px;align-items:stretch;justify-content:center;min-height:74px}
+  .pile{width:38px;flex:none;border:2px solid #556;border-radius:8px;background:#1a1f36;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:20px;color:#ccd}.pile small{font-size:11px}
+  .hcard{width:74px;flex:none;border-radius:8px;border:2px solid #555;padding:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;touch-action:none;user-select:none;cursor:pointer;color:#fff}
+  .hcard.atk{background:linear-gradient(#4a2020,#2a1414);border-color:#c84a4a}.hcard.skill{background:linear-gradient(#1d3a55,#122436);border-color:#3a8ac8}.hcard.power{background:linear-gradient(#3a2458,#22143a);border-color:#a060e8}
+  .hcard.used{opacity:.3}.hcard .hic{font-size:22px}.hcard .hnm{font-size:11px;font-weight:bold;text-align:center;line-height:1.1}.hcard .hct{font-size:10px;color:#ccd}
+  .hcard.drawin{animation:drawin .45s cubic-bezier(.2,.8,.3,1.2) backwards}
+  @keyframes drawin{from{transform:translate(-260px,30px) rotate(-25deg) scale(.4);opacity:0}to{transform:none;opacity:1}}
+  .pinfo{min-height:2.4em}
   .v2c{display:flex;justify-content:space-between;align-items:center;padding:5px 8px;font-size:12px}.v2c.atk{border-color:#c84a4a}.v2c.skill{border-color:#3a8ac8}.v2c.power{border-color:#a060e8}
 `; document.head.appendChild(st); }
 document.title = "볼배틀 탑 v2 (카드)";
