@@ -1153,7 +1153,8 @@ function hurt(s, tgt, src, amount, sk){
   if (src && src.id === 0 && tgt.id !== 0){ src.combo = (src.combo || 0) + 1; if (s.depth < 3){ s.depth++; fire(s, src, "hitfoe", {}); s.depth--; } }   // [상대]가 피해를 입을 때 / 연속 적중 +1
   if (tgt.id === 0) tgt.combo = 0;   // 피해를 입으면 연속 적중이 끊김
   let d = amount * mult * 12 / (12 + (tgt.curseT > 0 ? 0 : tgt.def));   // 저주: 방어력 0
-  if (s.tick > OT_START) d *= 1 + (s.tick - OT_START) / OT_RAMP;   // 연장전
+  if (!s.noOT && s.tick > OT_START) d *= 1 + (s.tick - OT_START) / OT_RAMP;   // 연장전 (v2는 끔)
+  if (s.dmgToE && tgt.id !== 0) d *= s.dmgToE; if (s.dmgToP && tgt.id === 0) d *= s.dmgToP;   // (v2) 전체 피해 배율
   d = clamp(d, 0.1, BIG);
   if (tgt.guardT > 0) d *= 0.5; if (tgt.dmgMul) d *= tgt.dmgMul;   // (v2) 수비 태세·철갑
   if (tgt.focus && src && src !== tgt && tgt.onFizzle) tgt.onFizzle(s, src);   // (v2) 정신집중 중 직접 공격을 받으면 좌절 (지속 피해는 src 없음)
@@ -1381,7 +1382,7 @@ function step(s){
   }
   const enemies = s.balls.slice(1), allDead = enemies.every(e => e.dead), pDead = P.hp <= 0;
   if (pDead || allDead) s.winner = pDead && allDead ? -1 : pDead ? 1 : 0;
-  else if (s.tick >= MAX_TICKS){
+  else if (s.tick >= (s.maxTicks || MAX_TICKS)){
     const rp = P.hp / P.maxHp, re = enemies.reduce((a, e) => a + Math.max(0, e.hp), 0) / enemies.reduce((a, e) => a + e.maxHp, 0);
     s.winner = rp > re ? 0 : re > rp ? 1 : -1;
   }
