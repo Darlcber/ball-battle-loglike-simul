@@ -3280,7 +3280,7 @@ makeEnemy = function(f, typeId, form, kind, rng){ const e = makeEnemy0(f, typeId
 for (const id of ["jailer", "clock", "wraith"]){ const k = ETYPE_IDS.indexOf(id); if (k >= 0) ETYPE_IDS.splice(k, 1); }
 
 const newRun0 = newRun;
-newRun = function(seed){ const r = newRun0(seed); r.maxHp = r.hp = 260; r.deck = []; r.cards = START_CARDS.map(id => ({ uid: r.uid++, id })); r.v2 = true; return r; };
+newRun = function(seed){ const r = newRun0(seed); r.maxHp = r.hp = 100; r.deck = []; r.cards = START_CARDS.map(id => ({ uid: r.uid++, id })); r.v2 = true; return r; };
 saveGame = function(where){ try { if (!runState) return; localStorage.setItem(V2_SAVE, JSON.stringify({ v: 2, where, r: runState }, (k, v) => k === "rng" ? undefined : v)); } catch (e) {} };
 loadGame = function(){ try { const d = JSON.parse(localStorage.getItem(V2_SAVE) || "null"); if (!d || !d.r || !d.r.cards) return null; const r = d.r; r.cards = r.cards.filter(c => CARDS[c.id.replace("+", "")]); const ok = k => !!CARDS[String(k).replace("+", "")]; if (r.cardRw && !r.cardRw.every(ok)) r.cardRw = null; if (r.shop) r.shop = r.shop.filter(x => x.type !== "card" || ok(x.id)); r.rng = rngOf(r); r.slots = r.decks[0].slots; return { r, where: d.where === "route" ? "route" : "prep" }; } catch (e) { return null; } };
 clearSave = function(){ try { localStorage.removeItem(V2_SAVE); } catch (e) {} };
@@ -3706,7 +3706,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.15";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.16";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -3791,9 +3791,9 @@ chooseRoute = function(i){ const r = runState, o = r.routes[i];
   .ccard:disabled{opacity:.4}.hcard .hnm{white-space:nowrap}`; document.head.appendChild(st); }
 
 // v2 난이도: 레벨업이 없어 플레이어가 안 크므로 적 성장을 줄이고 시작 체력을 늘림 (봇 측정 기준)
-ENEMY_ATK0 = 4.5; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;
+ENEMY_HP0 = 20; ENEMY_ATK0 = 4; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;   // (v2.16) 내 체력 100·배율 ×1 기준
 // (v2.10) 연장전을 끈 대신 양쪽 피해 ×2 (봇 측정: 연장전 있을 때와 전투 길이·통과율 비슷) — 카드 설명의 피해 숫자도 ×2로 보이게
-V2_PDMG = 2; V2_EDMG = 1.6;   // (v2.15) 방어력 0·더미 타임 삭제로 어려워져 적 피해 2 → 1.6
+V2_PDMG = 1; V2_EDMG = 1;   // (v2.16) 피해 배율 없음(양쪽 ×1). 대신 적 체력·공격과 내 체력(100)으로 맞춤
 (function keywordText(){ for (const id in CARDS){ const c = CARDS[id], t = [c.innate && "선천성", c.retain && "보존", c.ethereal && "휘발성", c.exhaust && "소멸"].filter(Boolean); if (t.length) c.desc = `〔${t.join("·")}〕 ` + c.desc; } })();
 (function scaleCardText(){ const k2 = n => +(n * V2_PDMG).toFixed(1);
   for (const id in CARDS){ const c = CARDS[id]; if (!c.desc) continue;
