@@ -3080,6 +3080,11 @@ function v2Pos(s, cur){ const pl = s.rd ? s.rd.plan : [cur], i = Math.max(0, pl.
   return { i, first: i === 0, last: i === pl.length - 1, n: ri + 1, nReal: real.length, prevType: prev && prev.id !== "_blank" ? CD(prev.id).type : null,
     atkBefore: pl.slice(0, i).filter(c => c.done2 && CD(c.id).type === "atk").length }; }
 const posOf = s => v2Pos(s, s.rd && s.rd.cur);
+// 벽꿍: 밀려난 적이 벽에 닿으면 피해 (e.wk = { dmg, n, until, cd })
+function v2Knock(s, me, f, power, wk){ if (!f || f.dead) return; let ux = f.x - me.x, uy = f.y - me.y; const d = Math.hypot(ux, uy) || 1; ux /= d; uy /= d;
+  f.rvx = ux * power; f.rvy = uy * power; f.hx = ux; f.hy = uy; f.dashT = T(wk.run || 0.5); f.dashMult = wk.mult || 3; f.wk = { dmg: wk.dmg, n: wk.n || 1, until: s.tick + T(wk.life || 1.2), cd: 0 }; }
+const atWall = k => k.x <= k.R + 1 || k.x >= W - k.R - 1 || k.y <= k.R + 1 || k.y >= H - k.R - 1;
+const demoMul = P => 1 + 0.5 * (P.demoM || 0);
 function v2SelfCost(s, me, n){ const d = Math.min(n, me.hp - 1); if (d > 0){ me.hp -= d; s.hurtT = 8; popS(s, me.x, me.y - me.R - 30, "🩸-" + fmt(d)); } }
 const RAR_W = { 0: 0, 1: 3, 2: 1.6, 3: 0.7 };   // 카드 희귀도: 1 일반 / 2 고급 / 3 희귀 (0 = 시작 전용)
 const wab = (eff, m) => ({ eff, lvMul: m || 1, act: "cast" });
@@ -3120,7 +3125,20 @@ const CARDS = {
   rhythm:  { name: "리듬 타격", icon: "🥁", type: "atk", cast: 1, focus: 0.3, rar: 1, desc: "피해 5, 직전 카드가 스킬이면 ×2", fire: (s, me, foe) => { const x = posOf(s).prevType === "skill" ? 2 : 1; wSlash(s, me, foe, wab("stick"), pw(me, 5 * x, wab("stick")), 70); if (x > 1) popS(s, me.x, me.y - me.R - 30, "🥁×2"); } },
   combo:   { name: "연계", icon: "🔗", type: "atk", cast: 1.5, focus: 0.5, rar: 2, desc: "피해 6 + 이번 라운드에 앞서 낸 공격 카드 1장당 +4", fire: (s, me, foe) => { const k = posOf(s).atkBefore; wSlash(s, me, foe, wab("stick"), pw(me, 6 + 4 * k, wab("stick")), 70); if (k) popS(s, me.x, me.y - me.R - 30, `🔗+${k}`); } },
   finale:  { name: "피날레", icon: "🏁", type: "atk", cast: 3, focus: 2, rar: 3, desc: "피해 8. 라운드 마지막 칸이면 대신 모든 적에게 즉시 이번 라운드 카드 수 × 8", fire: (s, me, foe) => { const p = posOf(s); if (p.last){ const d = pw(me, 8 * p.nReal, wab("stick")); s.shake = Math.min(9, s.shake + 5); for (const f of foesOf(s, me)) if (!f.dead && f.hp > 0){ s.bolts.push({ x1: f.x, y1: 0, x2: f.x, y2: f.y, t: 0, col: "#ffe066" }); s.booms.push({ x: f.x, y: f.y, r: 50, t: 0, col: "#ffe066" }); hurt(s, f, me, d); } popS(s, me.x, me.y - me.R - 30, `🏁×${p.nReal}`); } else wSlash(s, me, foe, wab("stick"), pw(me, 8, wab("stick")), 70); } },
+  // 설치 (v2.9)
+  timebomb:{ name: "시한폭탄", icon: "💣", type: "atk", cast: 1, focus: 0.5, rar: 1, desc: "적에게 달라붙는 폭탄, 3초 뒤 폭발 (피해 18, 범위)", fire: (s, me, foe) => { if (!foe) return; const dl = Math.max(0.5, 3 - (me.demoM ? 1 : 0)); s.v2.bombs.push({ tgt: foe, x: foe.x, y: foe.y, at: s.tick + T(dl), dmg: pw(me, 18, wab("bomb")) * demoMul(me), r: 70, dl: T(dl) }); } },
+  mine:    { name: "지뢰", icon: "🕳", type: "atk", cast: 1, focus: 0, rar: 1, desc: "적이 가는 길목에 설치, 적이 밟으면 피해 12 (이번 패턴 동안)", fire: (s, me, foe) => { const mx = foe ? clamp(foe.x + foe.hx * 70, 20, W - 20) : me.x, my = foe ? clamp(foe.y + foe.hy * 70, 20, H - 20) : me.y; s.mines.push({ owner: me.id, sk: "bomb", x: mx, y: my, t: T(60), arm: MINE_ARM, dmg: pw(me, 12, wab("bomb")) * demoMul(me), r: 60, trig: 40, v2: true }); } },
+  firefield:{ name: "불길 장판", icon: "🔥", type: "atk", cast: 1.5, focus: 1, rar: 2, desc: "적 자리에 4초 동안 불 장판 (초당 5)", fire: (s, me, foe) => { if (!foe) return; s.zones.push({ owner: me.id, sk: "zone", x: foe.x, y: foe.y, r: 60, t: T(4), dps: pw(me, 5, wab("zone")) * demoMul(me) }); } },
+  // 벽꿍 (v2.9)
+  shove:   { name: "밀쳐내기", icon: "👊", type: "atk", cast: 1.5, focus: 0.5, rar: 1, desc: "피해 4 + 크게 밀어냄, 벽에 부딪히면 피해 15", fire: (s, me, foe) => { if (!foe) return; hurt(s, foe, me, pw(me, 4, wab("stick"))); v2Knock(s, me, foe, 16, { dmg: pw(me, 15, wab("stick")), run: 0.6, mult: 3.2, life: 1.3 }); s.booms.push({ x: foe.x, y: foe.y, r: 30, t: 0, col: "#ffd090" }); } },
+  pinball: { name: "핀볼", icon: "🏓", type: "atk", cast: 2, focus: 1, rar: 2, desc: "적을 세게 튕김, 벽에 닿을 때마다 피해 8 (최대 3번)", fire: (s, me, foe) => { if (!foe) return; v2Knock(s, me, foe, 14, { dmg: pw(me, 8, wab("stick")), n: 3, run: 2, mult: 3.4, life: 2.2 }); s.booms.push({ x: foe.x, y: foe.y, r: 30, t: 0, col: "#90e0ff" }); } },
   // ---- 스킬 ----
+  corner:  { name: "구석 몰기", icon: "🧲", type: "skill", cast: 1, focus: 0, rar: 1, desc: "적을 가장 가까운 벽으로 밀어붙임 (벽꿍 피해 6) + 보호막 4", fire: (s, me, foe, dur, m = 1) => { v2Shield(s, me, 4 * m); if (!foe) return;
+    const opts = [[foe.x, -1, 0], [W - foe.x, 1, 0], [foe.y, 0, -1], [H - foe.y, 0, 1]].sort((a, b) => a[0] - b[0])[0]; const fake = { x: foe.x - opts[1] * 10, y: foe.y - opts[2] * 10 };
+    v2Knock(s, fake, foe, 12, { dmg: pw(me, 6, wab("stick")), run: 0.8, mult: 3, life: 1.5 }); } },
+  keep:    { name: "보존", icon: "📥", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "이번 라운드에 안 올린 카드를 다음 라운드 패로 넘김 (뽑는 장수와 별도)", fire: (s) => { s.v2.keepUnused = true; } },
+  prep:    { name: "준비", icon: "🃏", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 라운드 카드 1장 더 뽑기 (상한 무시)", fire: (s, me, foe, dur, m = 1) => { s.v2.extraNext = (s.v2.extraNext || 0) + (m > 1 ? 2 : 1); } },
+  recycle: { name: "재활용", icon: "♻", type: "skill", cast: 1, focus: 0.5, rar: 1, desc: "버린 더미의 공격 카드 1장을 다음 라운드 패로", fire: (s, me) => { const V = s.v2, ix = V.disc.map((k, i) => [k, i]).filter(([k]) => CD(k).type === "atk"); if (!ix.length) return; const [k, i] = ix[Math.floor(s.rng() * ix.length)]; V.disc.splice(i, 1); (V.kept = V.kept || []).push(k); popS(s, me.x, me.y - me.R - 30, "♻" + CD(k).name); } },
   opener:  { name: "개막", icon: "🎬", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "라운드 첫 칸이면 보호막 8, 아니면 2", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, (posOf(s).first ? 8 : 2) * m) },
   riposte: { name: "되받기", icon: "↩", type: "skill", cast: 1, focus: 0, rar: 1, desc: "보호막 3, 직전 카드가 공격이면 보호막 9", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, (posOf(s).prevType === "atk" ? 9 : 3) * m) },
   replay:  { name: "되풀이", icon: "🔁", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "바로 다음 카드(공격·스킬)를 한 번 더 발동 (위력 60%)", fire: (s, me, foe, dur, m = 1) => { me.dupNext = Math.min(1, 0.6 * m); } },
@@ -3152,6 +3170,9 @@ Object.assign(CARDS, {
   revenge: { name: "역습의 맹세", icon: "😤", type: "power", cast: 2, focus: 1, rar: 3, desc: "이번 전투 동안 내 카드가 좌절될 때마다 공격력 +10% (쌓임)", fire: (s, me, foe, dur, m = 1) => { me.revengeAtk = (me.revengeAtk || 0) + 0.1 * m; } },
   breaker: { name: "맥 끊기", icon: "😵", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 적 행동을 끊을 때마다 보호막 6 + 그 적의 다음 정신집중 +0.5초", fire: (s, me, foe, dur, m = 1) => { me.breakSh = (me.breakSh || 0) + 6 * m; me.breakN = (me.breakN || 0) + 1; } },
   conduct: { name: "지휘", icon: "🎼", type: "power", cast: 2.5, focus: 2, rar: 3, desc: "이번 전투 동안 라운드 첫 칸·마지막 칸 카드 효과 ×1.5", fire: (s, me, foe, dur, m = 1) => { me.condM = (me.condM || 0) + m; } },
+  demo:    { name: "폭파 전문가", icon: "⏰", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 설치물(폭탄·지뢰·장판) 위력 +50%, 시한폭탄 1초 일찍 폭발", fire: (s, me, foe, dur, m = 1) => { me.demoM = (me.demoM || 0) + m; } },
+  arena:   { name: "좁은 경기장", icon: "🏟", type: "power", cast: 2.5, focus: 2, rar: 3, desc: "이번 전투 동안 벽에 부딪힌 적은 1초 휘청(크게 느려짐) + 벽꿍 피해 +50%", fire: (s, me, foe, dur, m = 1) => { me.arenaM = (me.arenaM || 0) + m; } },
+  library: { name: "서고", icon: "📚", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 매 라운드 1장 더 뽑기", fire: (s, me, foe, dur, m = 1) => { s.v2.lib = (s.v2.lib || 0) + 1; } },
   brink:   { name: "벼랑 끝", icon: "💀", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 잃은 체력 합 ÷ 최대 체력만큼 공격력 증가 (회복해도 줄지 않음)", fire: (s, me, foe, dur, m = 1) => { me.brinkM = (me.brinkM || 0) + m; } },
   _blank:  { name: "공백", icon: "⬜", type: "blank", get cast(){ return state && state.v2 ? state.v2.blankDur || 0 : 0; }, focus: 0, rar: 0, desc: "아무것도 안 하고 관성으로 움직임 (패에 다 못 올린 시간)", fire: () => {} }
 });
@@ -3223,7 +3244,7 @@ function startFightV2(r){
   const ec = r.enc.map(e => { const c = { ...e, abilities: [], v2effs: e.v2effs || e.abilities.map(a => a.eff) }; delete c.scanMul; return c; });
   const s = makeBattle(pc, ec, r.seed * 100 + r.floor * 7 + r.retry);
   s.hooks.drink = () => !!usePotion(s, r, 0, true);
-  s.v2 = { draw: v2Shuffle(r.cards.map(c => c.id), s.rng), disc: [], hand: [], round: 0, focusMul: 1, played: 0, lastAtk: null };
+  s.v2 = { draw: v2Shuffle(r.cards.map(c => c.id), s.rng), disc: [], hand: [], bombs: [], kept: [], round: 0, focusMul: 1, played: 0, lastAtk: null };
   s.balls.slice(1).forEach(e => { e.v2pi = Math.floor(s.rng() * 4); });
   const P = s.balls[0]; P.onFizzle = (s2, src) => { const c = s.rd && s.rd.cur; if (c && P.focus){ c.fizzled = true; P.focus = false; popS(s, P.x, P.y - P.R - 14, "😵좌절"); s.hurtT = 14;
     const base = c.id.replace("+", ""), m = c.id.endsWith("+") ? UP_MUL : 1;
@@ -3243,6 +3264,11 @@ function v2PrepRound(s){
     if (!V.draw.length){ if (!V.disc.length) break; V.draw = v2Shuffle(V.disc.splice(0), s.rng); }
     const id = V.draw.pop(); V.hand.push(id); sum += CD(id).cast;
   }
+  for (let k = (V.extraNext || 0) + (V.lib || 0); k > 0; k--){   // 준비·서고: 상한 무시하고 더 뽑기
+    if (!V.draw.length){ if (!V.disc.length) break; V.draw = v2Shuffle(V.disc.splice(0), s.rng); }
+    V.hand.push(V.draw.pop()); }
+  V.extraNext = 0;
+  if (V.kept && V.kept.length){ V.hand.unshift(...V.kept); V.kept = []; }   // 보존·재활용으로 넘어온 카드
   s.rdPlan = { en, L };
 }
 function v2Timeline(s){   // 지금 손패 순서대로 시작·집중 끝·끝 시각
@@ -3260,6 +3286,12 @@ function v2Tick(s){
   rd.cur = cur;
   if (P.hp < P.prevHp) P.lostHp += P.prevHp - P.hp; P.prevHp = P.hp;   // 벼랑 끝: 잃은 체력 누적 (회복해도 안 줄어듦)
   if (P.brinkM){ P.atkBonus -= P.brinkAdd || 0; P.brinkAdd = P.lostHp / P.maxHp * P.brinkM; P.atkBonus += P.brinkAdd; }
+  for (const b of V.bombs){ if (b.tgt && !b.tgt.dead && b.tgt.hp > 0){ b.x = b.tgt.x; b.y = b.tgt.y; } }
+  for (const b of V.bombs) if (s.tick >= b.at){ b.done = true; s.booms.push({ x: b.x, y: b.y, r: b.r, t: 0, col: "#ff8a3a" }); s.shake = Math.min(9, s.shake + 4); for (const f of foesOf(s, P)) if (!f.dead && Math.hypot(f.x - b.x, f.y - b.y) < b.r + f.R) hurt(s, f, P, b.dmg, "bomb"); }
+  V.bombs = V.bombs.filter(b => !b.done);
+  for (const f of foesOf(s, P)){ const w = f.wk; if (!w || f.dead) continue; if (s.tick > w.until || w.n <= 0){ f.wk = null; continue; }
+    if (s.tick >= w.cd && atWall(f)){ w.n--; w.cd = s.tick + 20; const d = w.dmg * (P.arenaM ? 1 + 0.5 * P.arenaM : 1); s.booms.push({ x: f.x, y: f.y, r: 36, t: 0, col: "#ffd090" }); s.shake = Math.min(9, s.shake + 5); hurt(s, f, P, d); popS(s, f.x, f.y - f.R - 20, "🧱벽꿍!");
+      if (P.arenaM){ f.slowT = Math.max(f.slowT, T(1)); f.slowMult = 0.2; } } }
   if (P.afterimg && (!cur || cur.id === "_blank") && P.hp > 0){ P.aiT = (P.aiT || 0) + 1; if (P.aiT >= 60){ P.aiT = 0; const f = foesOf(s, P).filter(e => !e.dead && e.hp > 0).sort((a, b) => Math.hypot(a.x - P.x, a.y - P.y) - Math.hypot(b.x - P.x, b.y - P.y))[0];
     if (f){ s.bolts.push({ x1: P.x, y1: P.y, x2: f.x, y2: f.y, t: 0, col: "#c8c8ff" }); hurt(s, f, P, P.afterimg * atkOf(P)); } } }
   P.focus = !!(cur && !cur.fizzled && !cur.fired && rt < cur.fEnd && P.hp > 0);
@@ -3286,7 +3318,9 @@ function v2Tick(s){
     for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; if (!ev.fizzled){ e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast" }); } } }
   if (rt >= rd.T){ rd.over = true; P.focus = false; for (const E of rd.en) E.ball.focus = false;
     for (const c of rd.plan) (CD(c.id).type === "power" || c.id === "_blank" ? null : V.disc.push(c.id));   // 파워는 이번 전투에서 사라짐
-    if (V.unused){ V.disc.push(...V.unused); V.unused = null; }   // 패에 올리지 않은 카드는 버린 더미로
+    if (V.unused){ if (V.keepUnused) (V.kept = V.kept || []).push(...V.unused); else V.disc.push(...V.unused); V.unused = null; }   // 패에 올리지 않은 카드는 버린 더미로 (보존: 다음 라운드로)
+    V.keepUnused = false;
+    s.mines = s.mines.filter(m => !m.v2);   // 지뢰는 이번 패턴 동안만
     for (const b of s.balls){ b.shieldHp = 0; b.shieldT = 0; }   // 보호막은 패턴 안에서만
     V.hand = []; }
 }
@@ -3311,6 +3345,8 @@ function drawRunLine(c, rd, rt){
 }
 function drawV2(c, s){
   const P = s.balls[0], rd = s.rd;
+  for (const b of (s.v2 && s.v2.bombs) || []){ const left = (b.at - s.tick) / 60, p = 1 - (b.at - s.tick) / b.dl; c.save(); c.globalAlpha = 0.25 + 0.2 * Math.sin(s.tick / 4); c.fillStyle = "#ff6a2a"; c.beginPath(); c.arc(b.x, b.y, b.r * Math.max(0.2, p), 0, 6.29); c.fill(); c.globalAlpha = 1;
+    c.strokeStyle = "#ff8a3a"; c.setLineDash([5, 4]); c.lineWidth = 2; c.beginPath(); c.arc(b.x, b.y, b.r, 0, 6.29); c.stroke(); c.setLineDash([]); c.font = "bold 13px system-ui"; c.textAlign = "center"; c.fillStyle = "#fff"; c.fillText("💣" + left.toFixed(1), b.x, b.y + 42); c.restore(); }
   if (rd && !rd.over){ const rt = (s.tick - rd.t0) / 60;
     drawRunLine(c, rd, rt);
     const cur = rd.cur;
@@ -3352,7 +3388,7 @@ function renderPlan(){
       <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
       ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-en="${ei}" data-ev="${vi}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b><i class="evd">${evInfo(E.ball, v.sk, s.balls[0]).txt}</i></div>`).join("")}</div></div>`).join("");
   const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CD(c.id);
-      return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.cast}초</small></span></div>`; }).join("")}
+      return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.cast}초</small></span></div>${c.id.startsWith("timebomb") ? `<div class="tlboom" style="left:${pct(Math.min(T, c.start + C.focus * V.focusMul + Math.max(0.5, 3 - (s.balls[0].demoM ? 1 : 0))))}">💥</div>` : ""}`; }).join("")}
       ${sumAll > 0 ? `<div class="tlghost" style="left:${pct(sumP)};width:${pct(Math.max(0, sumAll - sumP))}"></div>` : ""}<div class="tldrop" id="tldrop"></div></div></div>`;
   const hand = V.hand.map((id, hi) => { const C = CD(id), used = V.placed.includes(hi);
     return `<div class="hcard ${C.type}${used ? " used" : ""}${V.anim ? " drawin" : ""}" data-hi="${hi}" style="${V.anim ? `animation-delay:${(hi * 0.13).toFixed(2)}s` : ""}"><div class="hic">${C.icon}</div><div class="hnm">${C.name}</div><div class="hct">${C.cast}초</div></div>`; }).join("")
@@ -3502,7 +3538,7 @@ document.getElementById("bBook").style.display = "none";
   .pile{width:38px;flex:none;border:2px solid #556;border-radius:8px;background:#1a1f36;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:20px;color:#ccd}.pile small{font-size:11px}
   .hcard{width:74px;flex:none;border-radius:8px;border:2px solid #555;padding:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;touch-action:none;user-select:none;cursor:pointer;color:#fff}
   .hcard.atk{background:linear-gradient(#4a2020,#2a1414);border-color:#c84a4a}.hcard.skill{background:linear-gradient(#1d3a55,#122436);border-color:#3a8ac8}.hcard.power{background:linear-gradient(#3a2458,#22143a);border-color:#a060e8}
-  .hcard.used{opacity:.3}.hcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border:2px dashed #888}.tlcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border-color:#888;border-style:dashed}.hcard .hic{font-size:22px}.hcard .hnm{font-size:11px;font-weight:bold;text-align:center;line-height:1.1}.hcard .hct{font-size:10px;color:#ccd}
+  .tlboom{position:absolute;top:-2px;transform:translateX(-50%);font-size:14px;pointer-events:none;z-index:3;filter:drop-shadow(0 0 3px #f60)}.hcard.used{opacity:.3}.hcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border:2px dashed #888}.tlcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border-color:#888;border-style:dashed}.hcard .hic{font-size:22px}.hcard .hnm{font-size:11px;font-weight:bold;text-align:center;line-height:1.1}.hcard .hct{font-size:10px;color:#ccd}
   .hcard.drawin{animation:drawin .45s cubic-bezier(.2,.8,.3,1.2) backwards}
   @keyframes drawin{from{transform:translate(-260px,30px) rotate(-25deg) scale(.4);opacity:0}to{transform:none;opacity:1}}
   .pinfo{min-height:2.4em}
@@ -3536,7 +3572,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.8";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.9";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
