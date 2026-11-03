@@ -1129,6 +1129,7 @@ function procAttrs(s, tgt, src, sk){
 }
 function hurt(s, tgt, src, amount, sk){
   if (tgt.hp <= 0 || tgt.dead || tgt.invulnT > 0) return;
+  if (tgt.blockN > 0 && src && src !== tgt){ tgt.blockN--; popS(s, tgt.x, tgt.y - tgt.R - 8, "🔰막음"); return; }   // (v2) 완충: 직접 공격 1번 막음
   if (tgt.trait === "immune" && sk !== "pierce"){ if (src && s.tick % 20 === 0) popS(s, tgt.x, tgt.y - tgt.R - 8, "무효"); return; }   // 망령 기사: 꿰뚫기만 피해
   let mult = 1;
   if (sk){ const at = SKILL[sk].attrs; if (at.some(a => tgt.weak.includes(a))) mult = WEAK_MUL; else if (at.some(a => tgt.resist.includes(a))) mult = RESIST_MUL; }
@@ -1153,6 +1154,8 @@ function hurt(s, tgt, src, amount, sk){
   let d = amount * mult * 12 / (12 + (tgt.curseT > 0 ? 0 : tgt.def));   // 저주: 방어력 0
   if (s.tick > OT_START) d *= 1 + (s.tick - OT_START) / OT_RAMP;   // 연장전
   d = clamp(d, 0.1, BIG);
+  if (tgt.guardT > 0) d *= 0.5; if (tgt.dmgMul) d *= tgt.dmgMul;   // (v2) 수비 태세·철갑
+  if (tgt.focus && src && src !== tgt && tgt.onFizzle) tgt.onFizzle(s);   // (v2) 정신집중 중 직접 공격을 받으면 좌절 (지속 피해는 src 없음)
   if (tgt.parryT > 0){ d *= 0.5; if (src && src !== tgt && !src.dead && src.hp > 0){ src.hp -= d * (tgt.parryPow || 1.5); popS(s, src.x, src.y - src.R - 8, "🛡" + fmt(d * (tgt.parryPow || 1.5))); } }   // 반격 방패
   if (tgt.shieldT > 0 && tgt.shieldHp > 0){ const ab = Math.min(tgt.shieldHp, d); tgt.shieldHp -= ab; d -= ab; if (d <= 0) return; }
   tgt.hp -= d; if (tgt.markT > 0) tgt.markAcc += d;
@@ -1258,7 +1261,7 @@ function step(s){
     if (s.tick % 30 === 0){ for (const dt of k.dots) hurt(s, k, null, dt.dps / 2); }
     for (const dt of k.dots) dt.t--;
     k.dots = k.dots.filter(dt => dt.t > 0);
-    const sp = frozen || k.aimT > 0 ? 0 : k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
+    const sp = frozen || k.aimT > 0 || k.focus ? 0 : k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
     k.x += k.hx * sp; k.y += k.hy * sp;
     let wall = false;
     if (k.x < k.R){ k.x = k.R; k.hx = Math.abs(k.hx); wall = true; }
