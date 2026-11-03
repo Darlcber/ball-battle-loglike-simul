@@ -3059,6 +3059,8 @@ function autoPats(effs, boss){   // 패턴이 정해지지 않은 적: 자기 �
   if (u.length > 1) P.push({ len: L + 1, ev: u.slice(0, boss ? 4 : 3).map((e, i) => [2 + i * (boss ? 2.5 : 3), e]) });
   return P;
 }
+const ENEMY_FOCUS = { atk: 1, skill: 0.8, power: 1.5 };   // 적 행동 전 정신집중(초): 멈춰 서고, 내 직접 공격에 맞으면 좌절
+const evFocus = (sk, t) => Math.min(t, ENEMY_FOCUS[actType(sk)] * (sk === "charge" ? 1 : 1));
 const patsOf = cfg => V2PAT[cfg.tid] || autoPats(cfg.v2effs || [], cfg.tag === "boss");
 
 // ===== 엔진 덮어쓰기 =====
@@ -3088,7 +3090,7 @@ function startFightV2(r){
 // 한 라운드 준비: 적마다 다음 패턴 → 길이 L, 내 카드는 시전 합이 L을 처음 넘을 때까지 뽑음
 function v2PrepRound(s){
   const V = s.v2; V.round++; V.hand = [];
-  const en = s.balls.slice(1).filter(e => !e.dead).map(e => { const P = patsOf(e.cfg); const p = P[(e.v2pi = (e.v2pi || 0) + 1) % P.length]; return { ball: e, pat: p, evs: p.ev.map(([t, sk]) => ({ t, sk, done: false })) }; });
+  const en = s.balls.slice(1).filter(e => !e.dead).map(e => { const P = patsOf(e.cfg); const p = P[(e.v2pi = (e.v2pi || 0) + 1) % P.length]; return { ball: e, pat: p, evs: p.ev.map(([t, sk]) => ({ t, sk, f: evFocus(sk, t), done: false })) }; });
   const L = Math.max(...en.map(x => x.pat.len), 4);
   let sum = 0;
   while (sum <= L){
@@ -3120,9 +3122,11 @@ function v2Tick(s){
   if (P.guardT > 0) P.guardT--;
   if (P.leechT > 0){ P.leechT--; for (const f of foesOf(s, P)) if (Math.hypot(f.x - P.x, f.y - P.y) < f.R + P.R + 2 && !(f.leechCd > s.tick)){ f.leechCd = s.tick + 30; const d = 10 * (P.atk / 12); hurt(s, f, P, d); P.hp = Math.min(P.maxHp, P.hp + d); popS(s, P.x, P.y - P.R - 14, "🩸+" + fmt(d)); } }
   if (P.regenV2 && s.tick % 60 === 0 && P.hp > 0) P.hp = Math.min(P.maxHp, P.hp + P.regenV2);
-  for (const E of rd.en){ const e = E.ball; if (e.dead) continue;
-    for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast" }); } }
-  if (rt >= rd.T){ rd.over = true; P.focus = false;
+  for (const E of rd.en){ const e = E.ball; if (e.dead){ e.focus = false; continue; }
+    const cev = E.evs.find(v => !v.done && rt >= v.t - v.f && rt < v.t); E.cur = cev || null; e.focus = !!(cev && !cev.fizzled);
+    if (!e.onFizzle) e.onFizzle = () => { const v = E.cur; if (v && e.focus){ v.fizzled = true; e.focus = false; popS(s, e.x, e.y - e.R - 14, "😵좌절"); } };
+    for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; if (!ev.fizzled){ e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast" }); } } }
+  if (rt >= rd.T){ rd.over = true; P.focus = false; for (const E of rd.en) E.ball.focus = false;
     for (const c of rd.plan) (CARDS[c.id].type === "power" ? null : V.disc.push(c.id));   // 파워는 이번 전투에서 사라짐
     V.hand = []; }
 }
@@ -3142,9 +3146,9 @@ function drawV2(c, s){
     if (cur && !P.dead){ const C = CARDS[cur.id];
       if (P.focus){ const p = (rt - cur.start) / Math.max(0.01, cur.fEnd - cur.start); c.beginPath(); c.arc(P.x, P.y, P.R + 6, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#7fd8ff"; c.lineWidth = 4; c.stroke(); }
       c.fillStyle = cur.fizzled ? "#ff8080" : "#fff3b0"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText((P.focus ? "🧘" : "") + C.name + (cur.fizzled ? " ✗" : ""), P.x, P.y - P.R - 10); }
-    for (const E of rd.en){ const e = E.ball; if (e.dead) continue; const nx = E.evs.find(v => !v.done);
-      if (nx && nx.t - rt < 0.9){ const p = 1 - Math.max(0, nx.t - rt) / 0.9; c.beginPath(); c.arc(e.x, e.y, e.R + 6, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#ff6060"; c.lineWidth = 4; c.stroke();
-        c.fillStyle = "#ffb0b0"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText("⚠" + SK_LABEL(nx.sk), e.x, e.y - e.R - 10); } }
+    for (const E of rd.en){ const e = E.ball; if (e.dead) continue; const nx = E.evs.find(v => !v.done && !v.fizzled);
+      if (nx && rt >= nx.t - nx.f){ const p = 1 - Math.max(0, nx.t - rt) / Math.max(0.05, nx.f); c.beginPath(); c.arc(e.x, e.y, e.R + 6, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#ff6060"; c.lineWidth = 4; c.stroke();
+        c.fillStyle = "#ffb0b0"; c.font = "bold 11px system-ui"; c.textAlign = "center"; c.fillText("🧘" + SK_LABEL(nx.sk), e.x, e.y - e.R - 10); } }
   }
 }
 
@@ -3168,9 +3172,9 @@ function renderPlan(){
   const tl = v2Placed(s), sumAll = V.hand.reduce((a, id) => a + CARDS[id].cast, 0), sumP = tl.length ? tl[tl.length - 1].end : 0;
   const L = s.rdPlan.L, T = Math.max(L, sumAll), pct = t => (t / T * 100).toFixed(2) + "%", all = V.placed.length === V.hand.length;
   let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
-  const enemyRows = s.rdPlan.en.map(E => `<div class="tlrow"><div class="tlname">${E.ball.icon}</div><div class="tlbar">
+  const enemyRows = s.rdPlan.en.map((E, ei) => `<div class="tlrow"><div class="tlname en" data-en="${ei}">${E.ball.icon}</div><div class="tlbar">
       <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
-      ${E.evs.map(v => `<div class="tlev ${actType(v.sk)}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b></div>`).join("")}</div></div>`).join("");
+      ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-en="${ei}" data-ev="${vi}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b></div>`).join("")}</div></div>`).join("");
   const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CARDS[c.id];
       return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.cast}초</small></span></div>`; }).join("")}
       ${sumAll > 0 ? `<div class="tlghost" style="left:${pct(sumP)};width:${pct(Math.max(0, sumAll - sumP))}"></div>` : ""}<div class="tldrop" id="tldrop"></div></div></div>`;
@@ -3179,7 +3183,7 @@ function renderPlan(){
   panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 내 패 ${sumAll.toFixed(1)}초${sumAll > L ? ` (더미 ${(sumAll - L).toFixed(1)}초)` : ""}</div>
     <div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}</div></div>${enemyRows}${myRow}</div>
     <div class="handrow"><div class="pile" title="뽑을 카드">🂠<small>${V.draw.length}</small></div>${hand}<div class="pile disc" title="버린 카드">🗑<small>${V.disc.length}</small></div></div>
-    <div class="small pinfo" id="pinfo">${planInfo || "패를 누른 순서대로 타임라인에 올라가요 · 타임라인 카드를 누르면 패로 돌아옴 · 꾹 누르면 효과 · 타임라인에서 꾹 눌러 끌면 자리 이동"}</div>
+    <div class="small pinfo" id="pinfo">${planInfo || "패를 누른 순서대로 타임라인에 올라가요 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 끌면 자리 이동 · 적 아이콘·행동을 누르면 적 정보"}</div>
     <div class="row" style="gap:6px"><button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : `패를 모두 올려 주세요 ${V.placed.length}/${V.hand.length}`}</button></div></div>`;
   V.anim = false;
   const showInfo = id => { const C = CARDS[id]; planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
@@ -3192,6 +3196,12 @@ function renderPlan(){
       if (drag) onDrag.end(ev); else if (!held) onTap(); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
+  // 적 정보: 적 아이콘을 누르면 능력치·특성·패턴, 행동 표시를 누르면 그 행동 설명
+  const setInfo = h => { planInfo = h; const el = document.getElementById("pinfo"); if (el) el.innerHTML = h; };
+  panel.querySelectorAll(".tlname.en").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], e = E.ball, c = e.cfg, P = patsOf(c);
+    setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} ⚔${fmt(e.atk * (1 + e.atkBonus))} 🛡${e.def}${c.attrs && c.attrs.length ? ` · 속성 ${attrIcons(c.attrs)} 약점 ${attrIcons(c.weak) || "-"}` : ""}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
+  panel.querySelectorAll(".tlev[data-ev]").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], v = E.evs[+el.dataset.ev], ty = actType(v.sk);
+    setInfo(`<b>${E.ball.icon} ${SK_FULL(v.sk)}</b> <span class="evc ${ty}">${{ atk: "공격", skill: "스킬", power: "파워" }[ty]}</span> · 정신집중 ${v.f}초 (${(v.t - v.f).toFixed(1)}~${v.t}초, 이때 직접 공격하면 좌절) → ${v.t}초 발동 · ${SKILL[v.sk] ? SKILL[v.sk].desc || "" : ""}`); });
   panel.querySelectorAll(".hcard").forEach(el => { const hi = +el.dataset.hi;
     press(el, () => { if (!V.placed.includes(hi)){ V.placed.push(hi); renderPlan(); } }, () => showInfo(V.hand[hi])); });
   const bar = document.getElementById("tlmine"), drop = document.getElementById("tldrop");
@@ -3211,13 +3221,13 @@ function renderSidesV2(){
   leftBody().innerHTML = `<div class="sideh">🃏 이번 라운드</div>` + tl.map((c, i) => { const C = CARDS[c.id]; return `<div class="card sentc v2c ${C.type}" id="v2c${i}"><span>${C.icon} ${C.name}</span><span class="cnt">${C.cast}초</span></div>`; }).join("");
   const en = s.rd && !s.rd.over ? s.rd.en : (s.rdPlan ? s.rdPlan.en : []);
   rightEl().innerHTML = `<div class="sideh">적 패턴</div>` + en.map((E, ei) => `<div class="ecard"><div class="lab"><b style="color:#fff">${E.ball.icon} ${E.ball.name}</b><span id="v2hp${ei}">❤${fmt(Math.max(0, E.ball.hp))}/${fmt(E.ball.maxHp)}</span></div>${E.ball.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[E.ball.trait] || ""}</div>` : ""}
-    ${E.evs.map((v, vi) => `<div class="card sentc ev2 ${actType(v.sk)}" id="v2e${ei}_${vi}" style="padding:3px 6px"><span class="small">${v.t}초 · ${SK_LABEL(v.sk)}</span></div>`).join("")}</div>`).join("");
+    ${E.evs.map((v, vi) => `<div class="card sentc ev2 ${actType(v.sk)}" id="v2e${ei}_${vi}" style="padding:3px 6px"><span class="small">${(v.t - v.f).toFixed(1)}~${v.t}초 · ${SK_LABEL(v.sk)}</span></div>`).join("")}</div>`).join("");
 }
 updateBattleUi = function(){
   const s = state; if (!s || !s.rd || phase !== "battle") return;
   const rd = s.rd, rt = (s.tick - rd.t0) / 60;
   rd.plan.forEach((c, i) => { const el = document.getElementById("v2c" + i); if (!el) return; el.classList.toggle("scan", rd.cur === c); el.classList.toggle("exec", !!c.fired); el.style.opacity = c.fizzled ? 0.4 : 1; });
-  rd.en.forEach((E, ei) => { E.evs.forEach((v, vi) => { const el = document.getElementById(`v2e${ei}_${vi}`); if (el){ el.classList.toggle("exec", v.done); el.classList.toggle("scan", !v.done && v.t - rt < 0.9); } });
+  rd.en.forEach((E, ei) => { E.evs.forEach((v, vi) => { const el = document.getElementById(`v2e${ei}_${vi}`); if (el){ el.classList.toggle("exec", v.done); el.classList.toggle("scan", !v.done && rt >= v.t - v.f); el.style.opacity = v.fizzled ? 0.4 : 1; } });
     const h = document.getElementById("v2hp" + ei); if (h) h.textContent = `❤${fmt(Math.max(0, E.ball.hp))}/${fmt(E.ball.maxHp)}`; });
   s.flash.splice(0);
 };
@@ -3278,6 +3288,8 @@ document.getElementById("bBook").style.display = "none";
   .ccard .cic{font-size:30px}.ccard .cnm{font-weight:bold;font-size:14px}.ccard .cty{font-size:10px;color:#ccd}.ccard .cds{font-size:11px;color:#eee}.ccard .ccnt{position:absolute;top:4px;right:8px;font-weight:bold;color:#ffe066}
   .tlev{border-left-width:4px}.tlev.atk{border-color:#ff5050;color:#ffb8b8;background:linear-gradient(90deg,rgba(255,80,80,.28),transparent 70%)}
   .tlev.skill{border-color:#4aa8ff;color:#b8dcff;background:linear-gradient(90deg,rgba(74,168,255,.28),transparent 70%)}.tlev.power{border-color:#b070ff;color:#e0c8ff;background:linear-gradient(90deg,rgba(176,112,255,.3),transparent 70%)}
+  .tlef{position:absolute;top:2px;bottom:2px;border-radius:3px}.tlef.atk{background:repeating-linear-gradient(45deg,rgba(255,80,80,.4),rgba(255,80,80,.4) 3px,transparent 3px,transparent 6px)}.tlef.skill{background:repeating-linear-gradient(45deg,rgba(74,168,255,.4),rgba(74,168,255,.4) 3px,transparent 3px,transparent 6px)}.tlef.power{background:repeating-linear-gradient(45deg,rgba(176,112,255,.45),rgba(176,112,255,.45) 3px,transparent 3px,transparent 6px)}
+  .tlname.en{cursor:pointer;border-radius:6px;background:#2a1d2a}.tlev[data-ev]{cursor:pointer}.evc{padding:0 3px;border-radius:3px}.evc.atk{background:#5a2424}.evc.skill{background:#1d3a55}.evc.power{background:#3a2458}
   .ev2.atk{border-color:#c84a4a}.ev2.skill{border-color:#3a8ac8}.ev2.power{border-color:#a060e8}
   .tlcard{touch-action:none;cursor:grab;user-select:none}.tlcard.dragging{opacity:.75;z-index:5;box-shadow:0 4px 12px rgba(0,0,0,.6)}.tlcard.held,.hcard.held{outline:2px solid #ffe066}
   .tlghost{position:absolute;top:2px;bottom:2px;border:2px dashed #556;border-radius:6px}
