@@ -1133,10 +1133,10 @@ function hurt(s, tgt, src, amount, sk){
   if (tgt.blockN > 0 && src && src !== tgt){ tgt.blockN--; popS(s, tgt.x, tgt.y - tgt.R - 8, "🔰막음"); return; }   // (v2) 완충: 직접 공격 1번 막음
   if (tgt.trait === "immune" && sk !== "pierce"){ if (src && s.tick % 20 === 0) popS(s, tgt.x, tgt.y - tgt.R - 8, "무효"); return; }   // 망령 기사: 꿰뚫기만 피해
   let mult = 1;
-  if (sk){ const at = SKILL[sk].attrs; if (at.some(a => tgt.weak.includes(a))) mult = WEAK_MUL; else if (at.some(a => tgt.resist.includes(a))) mult = RESIST_MUL; }
+  if (sk && !s.noAttr){ const at = SKILL[sk].attrs; if (at.some(a => tgt.weak.includes(a))) mult = WEAK_MUL; else if (at.some(a => tgt.resist.includes(a))) mult = RESIST_MUL; }
   if (tgt.shockT > 0) mult *= 1.25;   // 감전
   if (tgt.bleedT > 0) mult *= BLEED_TAKEN;   // 출혈: 받는 피해 증가
-  if (sk && src && src.id === 0 && tgt.id !== 0){   // 시너지: 맞기 직전의 상태이상 + 이번 공격 속성 (내 공격만, 같은 시너지는 같은 적에게 0.2초에 한 번)
+  if (sk && src && src.id === 0 && tgt.id !== 0 && !s.noAttr){   // 시너지: 맞기 직전의 상태이상 + 이번 공격 속성 (내 공격만, 같은 시너지는 같은 적에게 0.2초에 한 번)
     const at = SKILL[sk].attrs; tgt.synCd = tgt.synCd || {};
     for (const y of SYN){
       if (tgt.dead || tgt.hp <= 0) break;
@@ -1146,7 +1146,7 @@ function hurt(s, tgt, src, amount, sk){
     if (tgt.dead || tgt.hp <= 0) return;
   }
   if (sk && src){
-    procAttrs(s, tgt, src, sk);   // 속성 규칙(확률)
+    if (!s.noAttr) procAttrs(s, tgt, src, sk);   // 속성 규칙(확률) (v2는 끔)
     if (src.id === 0 && s.depth < 3) for (const a of SKILL[sk].attrs) if (a !== "normal"){ s.depth++; fire(s, src, "attrhit", { attr: a }); s.depth--; }   // [속성 스킬이 적중할 때]
     if (src.id === 0 && tgt.id !== 0 && s.depth < 3){ s.depth++; fire(s, src, "skillhit", { sk }); s.depth--; }   // [스킬]이 적중할 때
   }
@@ -3087,9 +3087,6 @@ function v2Knock(s, me, f, power, wk){ if (!f || f.dead) return; let ux = f.x - 
   f.rvx = ux * power; f.rvy = uy * power; f.hx = ux; f.hy = uy; f.dashT = T(wk.run || 0.5); f.dashMult = wk.mult || 3; f.wk = { dmg: wk.dmg, n: wk.n || 1, until: s.tick + T(wk.life || 1.2), cd: 0 }; }
 const atWall = k => k.x <= k.R + 1 || k.x >= W - k.R - 1 || k.y <= k.R + 1 || k.y >= H - k.R - 1;
 const demoMul = P => 1 + 0.5 * (P.demoM || 0);
-// 원소: 즉시 맞는 마법 한 줄기 (속성 sk로 맞혀 시너지가 터지게)
-function v2Zap(s, me, f, base, sk, col){ if (!f || f.dead || f.hp <= 0) return false; s.bolts.push({ x1: me.x, y1: me.y, x2: f.x, y2: f.y, t: 0, col }); hurt(s, f, me, pw(me, base, wab(sk)), sk); return !f.dead; }
-const statusCount = f => Object.keys(STATUS).filter(k => STATUS[k].n(f) > 0).length;
 // 타임라인 조작: 아직 안 온 가장 가까운 적 행동
 function v2NextEv(s){ const rd = s.rd; if (!rd) return null; const rt = (s.tick - rd.t0) / 60; let best = null;
   for (const E of rd.en) if (!E.ball.dead) for (const v of E.evs) if (!v.done && !v.fizzled && v.t > rt && (!best || v.t < best.v.t)) best = { E, v }; return best; }
@@ -3108,8 +3105,8 @@ const CARDS = {
   heavy:   { name: "강타", icon: "🔨", type: "atk", cast: 3.5, focus: 3, rar: 2, desc: "주변을 내리침 (피해 30, 범위 90) + 적 둔화", fire: (s, me, foe) => EFF.hammer(s, me, foe, wab("hammer")) },
   sniper:  { name: "저격", icon: "🔭", type: "atk", cast: 3.5, focus: 3, rar: 2, desc: "즉시 명중, 멀수록 강함 (최대 70)", fire: (s, me, foe) => EFF.sniper(s, me, foe, wab("sniper")) },
   vortex:  { name: "회오리", icon: "🌀", type: "atk", cast: 2.5, focus: 1.5, rar: 2, desc: "4초간 적을 빨아들이며 피해", fire: (s, me, foe) => EFF.vortex(s, me, foe, wab("vortex")) },
-  flamer:  { name: "화염 방사", icon: "🔥", type: "atk", cast: 3, focus: 1, rar: 2, desc: "1.5초간 앞쪽에 불길 (불)", fire: (s, me, foe) => EFF.flamer(s, me, foe, wab("flamer")) },
-  chain:   { name: "사슬 번개", icon: "⚡", type: "atk", cast: 2.5, focus: 2, rar: 2, desc: "적 사이를 3번 튕김 (피해 11, 전기)", fire: (s, me, foe) => EFF.chainbolt(s, me, foe, wab("chainbolt")) },
+  flamer:  { name: "화염 방사", icon: "🔥", type: "atk", cast: 3, focus: 1, rar: 2, desc: "1.5초간 앞쪽에 불길", fire: (s, me, foe) => EFF.flamer(s, me, foe, wab("flamer")) },
+  chain:   { name: "사슬 번개", icon: "⚡", type: "atk", cast: 2.5, focus: 2, rar: 2, desc: "적 사이를 3번 튕김 (피해 11)", fire: (s, me, foe) => EFF.chainbolt(s, me, foe, wab("chainbolt")) },
   gamble:  { name: "도박 주사위", icon: "🎲", type: "atk", cast: 1.5, focus: 1, rar: 2, desc: "5 × 눈(1~6), 6이면 다음 공격 ×2", fire: (s, me, foe) => EFF.gamble(s, me, foe, wab("gamble")) },
   leech:   { name: "흡혈 돌진", icon: "🩸", type: "atk", cast: 2.5, focus: 0, rar: 2, desc: "시전 동안 적과 부딪히면 체력 10 빼앗음", fire: (s, me, foe, dur) => { me.leechT = T(dur); EFF.dash(s, me, foe, wab("dash", 0.4)); } },
   meteor:  { name: "운석", icon: "☄", type: "atk", cast: 3, focus: 2.5, rar: 3, desc: "1.2초 뒤 적 자리에 떨어짐 (피해 70)", fire: (s, me, foe) => EFF.meteor(s, me, foe, wab("meteor")) },
@@ -3120,7 +3117,7 @@ const CARDS = {
   jab:     { name: "잽", icon: "👊", type: "atk", cast: 0.8, focus: 0.3, rar: 1, desc: "가볍게 달려들어 침 (피해 4)", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 4, wab("stick")), 60) },
   stab:    { name: "찌르기", icon: "🔪", type: "atk", cast: 1, focus: 0.2, rar: 1, desc: "재빨리 찌름 (피해 5)", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 5, wab("stick")), 65) },
   sling:   { name: "돌팔매", icon: "🪨", type: "atk", cast: 1, focus: 0.5, rar: 1, desc: "작은 돌을 던짐 (피해 5)", fire: (s, me, foe) => wShot(me, wab("stick"), 5, 11, 140, 0, 5, "#c8b8a0") },
-  ember:   { name: "불씨", icon: "✨", type: "atk", cast: 1.2, focus: 0.6, rar: 2, desc: "작은 불덩이 (피해 4, 불)", fire: (s, me, foe) => wShot(me, wab("flamer"), 4 / 1.6 * 1.6, 10, 140, 0, 5, "#ff9a3c") },
+  ember:   { name: "불씨", icon: "✨", type: "atk", cast: 1.2, focus: 0.6, rar: 2, desc: "작은 불덩이 (피해 4)", fire: (s, me, foe) => wShot(me, wab("flamer"), 4 / 1.6 * 1.6, 10, 140, 0, 5, "#ff9a3c") },
   // 여백·미끼·피 대가 (v2.7)
   calmhit: { name: "고요한 일격", icon: "🌙", type: "atk", cast: 1.5, focus: 0.5, rar: 2, desc: "피해 8 + 이번 라운드 빈 시간 1초당 +4", fire: (s, me, foe) => { const b = v2Blank(s); wSlash(s, me, foe, wab("stick"), pw(me, 8 + 4 * b, wab("stick")), 70); popS(s, me.x, me.y - me.R - 30, `🌙빈 ${b.toFixed(1)}초`); } },
   bluff:   { name: "허세", icon: "🎭", type: "atk", cast: 2.5, focus: 1.5, rar: 2, desc: "피해 30. 좌절되면 다음 카드 집중 0초", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 30, wab("stick")), 75) },
@@ -3140,15 +3137,9 @@ const CARDS = {
   // 벽꿍 (v2.9)
   shove:   { name: "밀쳐내기", icon: "👊", type: "atk", cast: 1.5, focus: 0.5, rar: 1, desc: "피해 4 + 크게 밀어냄, 벽에 부딪히면 피해 15", fire: (s, me, foe) => { if (!foe) return; hurt(s, foe, me, pw(me, 4, wab("stick"))); v2Knock(s, me, foe, 16, { dmg: pw(me, 15, wab("stick")), run: 0.6, mult: 3.2, life: 1.3 }); s.booms.push({ x: foe.x, y: foe.y, r: 30, t: 0, col: "#ffd090" }); } },
   pinball: { name: "핀볼", icon: "🏓", type: "atk", cast: 2, focus: 1, rar: 2, desc: "적을 세게 튕김, 벽에 닿을 때마다 피해 8 (최대 3번)", fire: (s, me, foe) => { if (!foe) return; v2Knock(s, me, foe, 14, { dmg: pw(me, 8, wab("stick")), n: 3, run: 2, mult: 3.4, life: 2.2 }); s.booms.push({ x: foe.x, y: foe.y, r: 30, t: 0, col: "#90e0ff" }); } },
-  // 원소 (v2.11) — 즉시 맞음 + 상태이상 확정, 속성 공격이라 시너지(융해·과부하·전도 등)도 터짐
-  ignite:  { name: "점화", icon: "🔥", type: "atk", cast: 1.5, focus: 1, rar: 1, desc: "피해 4 + 화상 (3초간 초당 2, 불)", fire: (s, me, foe) => { if (v2Zap(s, me, foe, 4, "fireball", "#ff8a3a")){ const d0 = foe.burnT > 0 ? foe.burnDps : 0; addBurn(s, foe, me); foe.burnDps = Math.max(d0, 2 * atkOf(me)); } } },
-  frost:   { name: "서리 손길", icon: "🧊", type: "atk", cast: 1, focus: 0.5, rar: 1, desc: "피해 3 + 냉기 1 (3이면 빙결 → 풀릴 때 최대 체력 10% 피해, 얼음)", fire: (s, me, foe) => { v2Zap(s, me, foe, 3, "frostbolt", "#8fd8ff"); } },
-  static:  { name: "정전기", icon: "⚡", type: "atk", cast: 0.8, focus: 0.3, rar: 1, desc: "피해 3 + 감전 (받는 피해 +25%, 전기)", fire: (s, me, foe) => { if (v2Zap(s, me, foe, 3, "lightning", "#ffe066")) addShock(s, foe, me); } },
-  elemburst:{ name: "원소 폭발", icon: "🌈", type: "atk", cast: 2.5, focus: 2, rar: 3, desc: "모든 적에게 걸린 상태이상 1종류당 피해 12", fire: (s, me) => { for (const f of foesOf(s, me)) if (!f.dead && f.hp > 0){ const n = statusCount(f); if (!n) continue; s.booms.push({ x: f.x, y: f.y, r: 34 + 8 * n, t: 0, col: "#e0a0ff" }); hurt(s, f, me, pw(me, 12 * n, wab("stick"))); popS(s, f.x, f.y - f.R - 20, `🌈×${n}`); } } },
   // 속도 (v2.11)
-  sonicb:  { name: "소닉 붐", icon: "🌪", type: "atk", cast: 1.5, focus: 0.5, rar: 2, desc: "내 주변(90) 충격파, 피해 24 × 지금 속도 배율 (바람)", fire: (s, me, foe) => EFF.sonic(s, me, foe, wab("sonic")) },
+  sonicb:  { name: "소닉 붐", icon: "🌪", type: "atk", cast: 1.5, focus: 0.5, rar: 2, desc: "내 주변(90) 충격파, 피해 24 × 지금 속도 배율", fire: (s, me, foe) => EFF.sonic(s, me, foe, wab("sonic")) },
   // ---- 스킬 ----
-  douse:   { name: "물세례", icon: "💧", type: "skill", cast: 1, focus: 0, rar: 1, desc: "모든 적 젖음 (젖은 적에 전기 → 전도, 얼음 → 급속 냉동)", fire: (s, me) => { for (const f of foesOf(s, me)) if (!f.dead){ s.booms.push({ x: f.x, y: f.y, r: 30, t: 0, col: "#4aa8ff" }); addWet(s, f, me); } } },
   sprint:  { name: "질주", icon: "💨", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "이번 패턴 동안 이동 속도 ×1.5", fire: (s, me, foe, dur, m = 1) => { const rd = s.rd, rem = rd ? rd.T - (s.tick - rd.t0) / 60 : 5; me.hasteMult = Math.max(me.hasteT > 0 ? me.hasteMult || 1 : 1, 1 + 0.5 * m); me.hasteT = Math.max(me.hasteT || 0, Math.ceil(rem * 60)); } },
   // 타임라인 조작 (v2.11)
   delay:   { name: "지연", icon: "⏸", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "가장 가까운 적 행동을 1.5초 뒤로 미룸 (이번 패턴 안에서)", fire: (s, me, foe, dur, m = 1) => { const n = v2NextEv(s); if (!n) return; n.v.t = Math.min(n.v.t + 1.5 * m, s.rd.T - 0.1); popS(s, n.E.ball.x, n.E.ball.y - n.E.ball.R - 20, "⏸지연"); } },
@@ -3194,7 +3185,6 @@ Object.assign(CARDS, {
   demo:    { name: "폭파 전문가", icon: "⏰", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 설치물(폭탄·지뢰·장판) 위력 +50%, 시한폭탄 1초 일찍 폭발", fire: (s, me, foe, dur, m = 1) => { me.demoM = (me.demoM || 0) + m; } },
   arena:   { name: "좁은 경기장", icon: "🏟", type: "power", cast: 2.5, focus: 2, rar: 3, desc: "이번 전투 동안 벽에 부딪힌 적은 1초 휘청(크게 느려짐) + 벽꿍 피해 +50%", fire: (s, me, foe, dur, m = 1) => { me.arenaM = (me.arenaM || 0) + m; } },
   library: { name: "서고", icon: "📚", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 매 라운드 1장 더 뽑기", fire: (s, me, foe, dur, m = 1) => { s.v2.lib = (s.v2.lib || 0) + 1; } },
-  catalyst:{ name: "촉매", icon: "🧪", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 상태이상에 걸린 적에게 주는 피해 +30%", fire: (s, me, foe, dur, m = 1) => { me.catalyst = (me.catalyst || 0) + 0.3 * m; } },
   elastic: { name: "탄력", icon: "🏃", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 라운드마다 이동 속도 +15% (쌓임, 최대 +180%)", fire: (s, me, foe, dur, m = 1) => { me.elastic = (me.elastic || 0) + 1; me.accel = Math.min(ACCEL_MAX, (me.accel || 0) + 1); } },
   tsense:  { name: "시간 감각", icon: "⌛", type: "power", cast: 2.5, focus: 2, rar: 3, desc: "이번 전투 동안 매 라운드 적 행동이 모두 0.5초씩 늦게 옴", fire: (s, me, foe, dur, m = 1) => { me.tsense = (me.tsense || 0) + 0.5 * m; } },
   brink:   { name: "벼랑 끝", icon: "💀", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 잃은 체력 합 ÷ 최대 체력만큼 공격력 증가 (회복해도 줄지 않음)", fire: (s, me, foe, dur, m = 1) => { me.brinkM = (me.brinkM || 0) + m; } },
@@ -3217,12 +3207,6 @@ function CD(k){
 const upText = k => { const b = CARDS[k], cut = Math.min(0.5, b.focus); return `${cut ? `시전·집중 -${cut}초, ` : ""}효과 ×${UP_MUL}`; };
 const cardLabel = id => `${CD(id).icon} ${CD(id).name}`;
 
-// (v2.11) 최대 체력 비례 시너지는 v2에서 약하게: 융해 20%→12%, 파쇄 35%→20%
-SYN_FX.melt = (s, src, t) => { endFreeze(s, t); synHp(s, t, t.maxHp * 0.12); };
-SYN_FX.shatter = (s, src, t) => { endFreeze(s, t); synHp(s, t, t.maxHp * 0.2); };
-// 촉매: 상태이상 걸린 적에게 주는 피해 증가
-const hurtV1 = hurt;
-hurt = function(s, tgt, src, amount, sk){ if (src && src.id === 0 && src.catalyst && tgt.id !== 0 && statusCount(tgt) > 0) amount *= 1 + src.catalyst; return hurtV1(s, tgt, src, amount, sk); };
 // ===== 적 패턴 (타임라인) =====  [초, 스킬]. 패턴 길이 len 이후는 더미 타임
 const V2PAT = {
   archer:  [{ len: 10, ev: [[3, "shoot"], [7, "shoot"]] }, { len: 9, ev: [[4, "missile"]] }, { len: 11, ev: [[2, "shoot"], [5, "shoot"], [8, "shoot"]] }],
@@ -3264,7 +3248,7 @@ for (const id of ["jailer", "clock", "wraith"]){ const k = ETYPE_IDS.indexOf(id)
 const newRun0 = newRun;
 newRun = function(seed){ const r = newRun0(seed); r.maxHp = r.hp = 260; r.deck = []; r.cards = START_CARDS.map(id => ({ uid: r.uid++, id })); r.v2 = true; return r; };
 saveGame = function(where){ try { if (!runState) return; localStorage.setItem(V2_SAVE, JSON.stringify({ v: 2, where, r: runState }, (k, v) => k === "rng" ? undefined : v)); } catch (e) {} };
-loadGame = function(){ try { const d = JSON.parse(localStorage.getItem(V2_SAVE) || "null"); if (!d || !d.r || !d.r.cards) return null; const r = d.r; r.rng = rngOf(r); r.slots = r.decks[0].slots; return { r, where: d.where === "route" ? "route" : "prep" }; } catch (e) { return null; } };
+loadGame = function(){ try { const d = JSON.parse(localStorage.getItem(V2_SAVE) || "null"); if (!d || !d.r || !d.r.cards) return null; const r = d.r; r.cards = r.cards.filter(c => CARDS[c.id.replace("+", "")]); const ok = k => !!CARDS[String(k).replace("+", "")]; if (r.cardRw && !r.cardRw.every(ok)) r.cardRw = null; if (r.shop) r.shop = r.shop.filter(x => x.type !== "card" || ok(x.id)); r.rng = rngOf(r); r.slots = r.decks[0].slots; return { r, where: d.where === "route" ? "route" : "prep" }; } catch (e) { return null; } };
 clearSave = function(){ try { localStorage.removeItem(V2_SAVE); } catch (e) {} };
 
 function v2Shuffle(a, rng){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -3273,7 +3257,7 @@ function startFightV2(r){
   const pc = playerCfg(r); delete pc.scanMul; pc.abilities = [];
   const ec = r.enc.map(e => { const c = { ...e, abilities: [], v2effs: e.v2effs || e.abilities.map(a => a.eff) }; delete c.scanMul; return c; });
   const s = makeBattle(pc, ec, r.seed * 100 + r.floor * 7 + r.retry);
-  s.noOT = true; s.maxTicks = T(600); s.dmgToE = V2_PDMG; s.dmgToP = V2_EDMG;   // 연장전 끔, 대신 양쪽 피해 배율
+  s.noOT = true; s.noAttr = true; s.maxTicks = T(600); s.dmgToE = V2_PDMG; s.dmgToP = V2_EDMG;   // 연장전 끔, 대신 양쪽 피해 배율
   s.hooks.drink = () => !!usePotion(s, r, 0, true);
   s.v2 = { draw: v2Shuffle(r.cards.map(c => c.id), s.rng), disc: [], hand: [], bombs: [], kept: [], round: 0, focusMul: 1, played: 0, lastAtk: null };
   s.balls.slice(1).forEach(e => { e.v2pi = Math.floor(s.rng() * 4); });
@@ -3446,7 +3430,7 @@ function renderPlan(){
   // 적 정보: 적 아이콘을 누르면 능력치·특성·패턴, 행동 표시를 누르면 그 행동 설명
   const setInfo = h => { planInfo = h; const el = document.getElementById("pinfo"); if (el) el.innerHTML = h; };
   panel.querySelectorAll(".tlname.en").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], e = E.ball, c = e.cfg, P = patsOf(c);
-    setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} ⚔${fmt(e.atk * (1 + e.atkBonus))} 🛡${e.def}${c.attrs && c.attrs.length ? ` · 속성 ${attrIcons(c.attrs)} 약점 ${attrIcons(c.weak) || "-"}` : ""}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
+    setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} ⚔${fmt(e.atk * (1 + e.atkBonus))} 🛡${e.def}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
   panel.querySelectorAll(".tlev[data-ev]").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], v = E.evs[+el.dataset.ev], ty = actType(v.sk);
     setInfo(`<b>${E.ball.icon} ${SK_FULL(v.sk)}</b> <span class="evc ${ty}">${{ atk: "공격", skill: "스킬", power: "파워" }[ty]}</span> · 정신집중 ${v.f}초 (${(v.t - v.f).toFixed(1)}~${v.t}초, 이때 직접 공격하면 좌절) → ${v.t}초 발동${(i => i.d != null ? ` · 예상 피해 <b>${Math.round(i.d)}${EV_PER[v.sk] || ""}</b>` : "")(evInfo(E.ball, v.sk, s.balls[0]))}${EV_BASE[v.sk] != null || v.sk === "freeze" ? (EV_TARGET.has(v.sk) ? " · 🎯 타겟팅(피할 수 없음, 막거나 끊어야 함)" : " · ↗ 논타겟팅(움직임으로 피할 수 있음)") : ""} · ${SKILL[v.sk] ? SKILL[v.sk].desc || "" : ""}`); });
   panel.querySelectorAll(".hcard").forEach(el => { const hi = el.dataset.hi === "B" ? "B" : +el.dataset.hi;
@@ -3582,7 +3566,7 @@ document.title = "볼배틀 탑 v2 (카드)";
 
 // ===================== v2.1: 레벨업·경험치·주사위 삭제 + 덱 관리(대장간·상점·휴식) =====================
 // v2에서 의미 없는 유물(문장·검사·레벨업 관련) 빼기
-for (const id of ["veil", "veil2", "book", "hourglass", "bookmark", "secondhand", "gear", "bluelens", "bell", "dicebox", "shackle", "alchemy", "grail"]) delete RELIC[id];
+for (const id of ["prism", "mask", "veil", "veil2", "book", "hourglass", "bookmark", "secondhand", "gear", "bluelens", "bell", "dicebox", "shackle", "alchemy", "grail"]) delete RELIC[id];
 // 승리 정산: 골드·회복·물약만 (경험치·레벨업 없음)
 winFloor = function(r, s, kind){
   dropTemps(r);
@@ -3606,7 +3590,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.11";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.12";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";

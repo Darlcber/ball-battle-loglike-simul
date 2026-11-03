@@ -1133,10 +1133,10 @@ function hurt(s, tgt, src, amount, sk){
   if (tgt.blockN > 0 && src && src !== tgt){ tgt.blockN--; popS(s, tgt.x, tgt.y - tgt.R - 8, "🔰막음"); return; }   // (v2) 완충: 직접 공격 1번 막음
   if (tgt.trait === "immune" && sk !== "pierce"){ if (src && s.tick % 20 === 0) popS(s, tgt.x, tgt.y - tgt.R - 8, "무효"); return; }   // 망령 기사: 꿰뚫기만 피해
   let mult = 1;
-  if (sk){ const at = SKILL[sk].attrs; if (at.some(a => tgt.weak.includes(a))) mult = WEAK_MUL; else if (at.some(a => tgt.resist.includes(a))) mult = RESIST_MUL; }
+  if (sk && !s.noAttr){ const at = SKILL[sk].attrs; if (at.some(a => tgt.weak.includes(a))) mult = WEAK_MUL; else if (at.some(a => tgt.resist.includes(a))) mult = RESIST_MUL; }
   if (tgt.shockT > 0) mult *= 1.25;   // 감전
   if (tgt.bleedT > 0) mult *= BLEED_TAKEN;   // 출혈: 받는 피해 증가
-  if (sk && src && src.id === 0 && tgt.id !== 0){   // 시너지: 맞기 직전의 상태이상 + 이번 공격 속성 (내 공격만, 같은 시너지는 같은 적에게 0.2초에 한 번)
+  if (sk && src && src.id === 0 && tgt.id !== 0 && !s.noAttr){   // 시너지: 맞기 직전의 상태이상 + 이번 공격 속성 (내 공격만, 같은 시너지는 같은 적에게 0.2초에 한 번)
     const at = SKILL[sk].attrs; tgt.synCd = tgt.synCd || {};
     for (const y of SYN){
       if (tgt.dead || tgt.hp <= 0) break;
@@ -1146,7 +1146,7 @@ function hurt(s, tgt, src, amount, sk){
     if (tgt.dead || tgt.hp <= 0) return;
   }
   if (sk && src){
-    procAttrs(s, tgt, src, sk);   // 속성 규칙(확률)
+    if (!s.noAttr) procAttrs(s, tgt, src, sk);   // 속성 규칙(확률) (v2는 끔)
     if (src.id === 0 && s.depth < 3) for (const a of SKILL[sk].attrs) if (a !== "normal"){ s.depth++; fire(s, src, "attrhit", { attr: a }); s.depth--; }   // [속성 스킬이 적중할 때]
     if (src.id === 0 && tgt.id !== 0 && s.depth < 3){ s.depth++; fire(s, src, "skillhit", { sk }); s.depth--; }   // [스킬]이 적중할 때
   }
