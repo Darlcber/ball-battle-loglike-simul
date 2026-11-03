@@ -3071,9 +3071,15 @@ window.botRun = botRun; window.newRun = newRun;
 const V2_SAVE = "ballTowerV2";
 const CARD_TYPE = { atk: { name: "공격", col: "#c84a4a" }, skill: { name: "스킬", col: "#3a8ac8" }, power: { name: "파워", col: "#a060e8" }, blank: { name: "공백", col: "#777" } };
 // 보호막은 이번 패턴(라운드)이 끝날 때까지만
-function v2Shield(s, me, amt){ const rd = s.rd, rem = rd && !rd.over ? rd.T - (s.tick - rd.t0) / 60 : 5; me.shieldHp = Math.min(BIG, me.shieldHp + amt); me.shieldT = Math.max(me.shieldT, Math.ceil(rem * 60) + 1); popS(s, me.x, me.y - me.R - 22, "🛡+" + fmt(amt)); }
+function v2Shield(s, me, amt){ amt *= me.skMul || 1; const rd = s.rd, rem = rd && !rd.over ? rd.T - (s.tick - rd.t0) / 60 : 5; me.shieldHp = Math.min(BIG, me.shieldHp + amt); me.shieldT = Math.max(me.shieldT, Math.ceil(rem * 60) + 1); popS(s, me.x, me.y - me.R - 22, "🛡+" + fmt(amt)); }
 // 빈 시간 = 이번 라운드에서 내 카드가 없는 시간 (공백 카드 + 끝에 남는 시간)
 function v2Blank(s){ const rd = s.rd; if (!rd) return 0; let b = 0, end = 0; for (const c of rd.plan){ if (c.id === "_blank") b += c.end - c.start; end = c.end; } return b + Math.max(0, rd.T - end); }
+// 순서 정보: 이 카드가 라운드 몇 번째인지, 첫·마지막인지(공백도 칸을 차지), 직전 카드, 앞서 낸 공격 수
+function v2Pos(s, cur){ const pl = s.rd ? s.rd.plan : [cur], i = Math.max(0, pl.indexOf(cur)), prev = i > 0 ? pl[i - 1] : null;
+  const real = pl.filter(c => c.id !== "_blank"), ri = real.indexOf(cur);
+  return { i, first: i === 0, last: i === pl.length - 1, n: ri + 1, nReal: real.length, prevType: prev && prev.id !== "_blank" ? CD(prev.id).type : null,
+    atkBefore: pl.slice(0, i).filter(c => c.done2 && CD(c.id).type === "atk").length }; }
+const posOf = s => v2Pos(s, s.rd && s.rd.cur);
 function v2SelfCost(s, me, n){ const d = Math.min(n, me.hp - 1); if (d > 0){ me.hp -= d; s.hurtT = 8; popS(s, me.x, me.y - me.R - 30, "🩸-" + fmt(d)); } }
 const RAR_W = { 0: 0, 1: 3, 2: 1.6, 3: 0.7 };   // 카드 희귀도: 1 일반 / 2 고급 / 3 희귀 (0 = 시작 전용)
 const wab = (eff, m) => ({ eff, lvMul: m || 1, act: "cast" });
@@ -3106,7 +3112,18 @@ const CARDS = {
   calmhit: { name: "고요한 일격", icon: "🌙", type: "atk", cast: 1.5, focus: 0.5, rar: 2, desc: "피해 8 + 이번 라운드 빈 시간 1초당 +4", fire: (s, me, foe) => { const b = v2Blank(s); wSlash(s, me, foe, wab("stick"), pw(me, 8 + 4 * b, wab("stick")), 70); popS(s, me.x, me.y - me.R - 30, `🌙빈 ${b.toFixed(1)}초`); } },
   bluff:   { name: "허세", icon: "🎭", type: "atk", cast: 2.5, focus: 1.5, rar: 2, desc: "피해 30. 좌절되면 다음 카드 집중 0초", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 30, wab("stick")), 75) },
   madblade:{ name: "광기의 칼", icon: "🗡", type: "atk", cast: 1.5, focus: 0.5, rar: 2, desc: "체력 5를 잃고 피해 22", fire: (s, me, foe) => { v2SelfCost(s, me, 5); wSlash(s, me, foe, wab("stick"), pw(me, 22, wab("stick")), 70); } },
+  // 끊기 (v2.8)
+  ambush:  { name: "기습", icon: "⚡", type: "atk", cast: 0.8, focus: 0, rar: 1, desc: "피해 4, 정신집중 중인 적에게 ×3", fire: (s, me, foe) => { const f = foesOf(s, me).find(e => e.focus && !e.dead) || foe; const x = f && f.focus ? 3 : 1; wSlash(s, me, f, wab("stick"), pw(me, 4 * x, wab("stick")), 75); if (x > 1) popS(s, me.x, me.y - me.R - 30, "⚡기습!"); } },
+  pin:     { name: "견제 바늘", icon: "📌", type: "atk", cast: 1, focus: 0.3, rar: 2, desc: "정신집중 중인 적에게 반드시 맞는 바늘 (피해 3, 끊기). 없으면 가까운 적", fire: (s, me, foe) => { const f = foesOf(s, me).find(e => e.focus && !e.dead && e.hp > 0) || foe; if (!f) return; s.bolts.push({ x1: me.x, y1: me.y, x2: f.x, y2: f.y, t: 0, col: "#e8e8ff" }); hurt(s, f, me, pw(me, 3, wab("stick"))); } },
+  // 순서 (v2.8)
+  stair:   { name: "점층", icon: "🪜", type: "atk", cast: 1, focus: 0.3, rar: 1, desc: "피해 3 × 이번 라운드 몇 번째 카드인지", fire: (s, me, foe) => { const n = posOf(s).n; wSlash(s, me, foe, wab("stick"), pw(me, 3 * n, wab("stick")), 70); popS(s, me.x, me.y - me.R - 30, `🪜${n}번째`); } },
+  rhythm:  { name: "리듬 타격", icon: "🥁", type: "atk", cast: 1, focus: 0.3, rar: 1, desc: "피해 5, 직전 카드가 스킬이면 ×2", fire: (s, me, foe) => { const x = posOf(s).prevType === "skill" ? 2 : 1; wSlash(s, me, foe, wab("stick"), pw(me, 5 * x, wab("stick")), 70); if (x > 1) popS(s, me.x, me.y - me.R - 30, "🥁×2"); } },
+  combo:   { name: "연계", icon: "🔗", type: "atk", cast: 1.5, focus: 0.5, rar: 2, desc: "피해 6 + 이번 라운드에 앞서 낸 공격 카드 1장당 +4", fire: (s, me, foe) => { const k = posOf(s).atkBefore; wSlash(s, me, foe, wab("stick"), pw(me, 6 + 4 * k, wab("stick")), 70); if (k) popS(s, me.x, me.y - me.R - 30, `🔗+${k}`); } },
+  finale:  { name: "피날레", icon: "🏁", type: "atk", cast: 3, focus: 2, rar: 3, desc: "피해 8. 라운드 마지막 칸이면 대신 모든 적에게 즉시 이번 라운드 카드 수 × 8", fire: (s, me, foe) => { const p = posOf(s); if (p.last){ const d = pw(me, 8 * p.nReal, wab("stick")); s.shake = Math.min(9, s.shake + 5); for (const f of foesOf(s, me)) if (!f.dead && f.hp > 0){ s.bolts.push({ x1: f.x, y1: 0, x2: f.x, y2: f.y, t: 0, col: "#ffe066" }); s.booms.push({ x: f.x, y: f.y, r: 50, t: 0, col: "#ffe066" }); hurt(s, f, me, d); } popS(s, me.x, me.y - me.R - 30, `🏁×${p.nReal}`); } else wSlash(s, me, foe, wab("stick"), pw(me, 8, wab("stick")), 70); } },
   // ---- 스킬 ----
+  opener:  { name: "개막", icon: "🎬", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "라운드 첫 칸이면 보호막 8, 아니면 2", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, (posOf(s).first ? 8 : 2) * m) },
+  riposte: { name: "되받기", icon: "↩", type: "skill", cast: 1, focus: 0, rar: 1, desc: "보호막 3, 직전 카드가 공격이면 보호막 9", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, (posOf(s).prevType === "atk" ? 9 : 3) * m) },
+  replay:  { name: "되풀이", icon: "🔁", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "바로 다음 카드(공격·스킬)를 한 번 더 발동 (위력 60%)", fire: (s, me, foe, dur, m = 1) => { me.dupNext = Math.min(1, 0.6 * m); } },
   meditate:{ name: "명상", icon: "🪷", type: "skill", cast: 1, focus: 0, rar: 1, desc: "이번 라운드 빈 시간 1초당 보호막 4 (이번 패턴 동안)", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 4 * v2Blank(s) * m) },
   trap:    { name: "덫 놓기", icon: "🪤", type: "skill", cast: 2, focus: 1.9, rar: 1, desc: "집중 중 맞아 좌절되면 때린 적에게 피해 20 + 보호막 8. 끝까지 집중하면 보호막 4", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 4 * m) },
   oath:    { name: "피의 서약", icon: "🩸", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "체력 3을 잃고, 다음 카드 집중 0초", fire: (s, me) => { v2SelfCost(s, me, 3); me.nextFocus0 = true; } },
@@ -3133,6 +3150,8 @@ const CARDS = {
 Object.assign(CARDS, {
   afterimg:{ name: "잔상", icon: "👤", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 빈 시간 1초마다 가까운 적에게 피해 5", fire: (s, me, foe, dur, m = 1) => { me.afterimg = (me.afterimg || 0) + 5 * m; } },
   revenge: { name: "역습의 맹세", icon: "😤", type: "power", cast: 2, focus: 1, rar: 3, desc: "이번 전투 동안 내 카드가 좌절될 때마다 공격력 +10% (쌓임)", fire: (s, me, foe, dur, m = 1) => { me.revengeAtk = (me.revengeAtk || 0) + 0.1 * m; } },
+  breaker: { name: "맥 끊기", icon: "😵", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 적 행동을 끊을 때마다 보호막 6 + 그 적의 다음 정신집중 +0.5초", fire: (s, me, foe, dur, m = 1) => { me.breakSh = (me.breakSh || 0) + 6 * m; me.breakN = (me.breakN || 0) + 1; } },
+  conduct: { name: "지휘", icon: "🎼", type: "power", cast: 2.5, focus: 2, rar: 3, desc: "이번 전투 동안 라운드 첫 칸·마지막 칸 카드 효과 ×1.5", fire: (s, me, foe, dur, m = 1) => { me.condM = (me.condM || 0) + m; } },
   brink:   { name: "벼랑 끝", icon: "💀", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 잃은 체력 합 ÷ 최대 체력만큼 공격력 증가 (회복해도 줄지 않음)", fire: (s, me, foe, dur, m = 1) => { me.brinkM = (me.brinkM || 0) + m; } },
   _blank:  { name: "공백", icon: "⬜", type: "blank", get cast(){ return state && state.v2 ? state.v2.blankDur || 0 : 0; }, focus: 0, rar: 0, desc: "아무것도 안 하고 관성으로 움직임 (패에 다 못 올린 시간)", fire: () => {} }
 });
@@ -3246,8 +3265,13 @@ function v2Tick(s){
   P.focus = !!(cur && !cur.fizzled && !cur.fired && rt < cur.fEnd && P.hp > 0);
   if (cur && cur.id !== "_blank" && !cur.fired && !cur.fizzled && rt >= cur.fEnd){
     cur.fired = true; const C = CD(cur.id), foe = other(s, P);
-    P.castMul = 1; if (P.nextBoost && C.type === "atk" && !cur.id.startsWith("gamble")){ P.castMul = P.nextBoost; P.nextBoost = 0; popS(s, P.x, P.y - P.R - 30, "🎲×2!"); }   // 도박 6: 다음 공격 ×2
-    C.fire(s, P, foe, Math.max(0.2, cur.end - rt)); V.played++; P.castMul = 1;
+    P.castMul = 1; P.skMul = 1; if (P.nextBoost && C.type === "atk" && !cur.id.startsWith("gamble")){ P.castMul = P.nextBoost; P.nextBoost = 0; popS(s, P.x, P.y - P.R - 30, "🎲×2!"); }   // 도박 6: 다음 공격 ×2
+    const pos = v2Pos(s, cur);
+    if (P.condM && (pos.first || pos.last)){ P.castMul *= 1 + 0.5 * P.condM; P.skMul *= 1 + 0.5 * P.condM; popS(s, P.x, P.y - P.R - 38, "🎼"); }   // 지휘: 첫·마지막 카드 강화
+    const dup = C.type !== "power" && !cur.id.startsWith("replay") ? P.dupNext : 0; if (dup) P.dupNext = 0;
+    C.fire(s, P, foe, Math.max(0.2, cur.end - rt));
+    if (dup){ P.castMul *= dup; P.skMul *= dup; C.fire(s, P, foe, Math.max(0.2, cur.end - rt)); popS(s, P.x, P.y - P.R - 38, "🔁"); }
+    V.played++; P.castMul = 1; P.skMul = 1; cur.done2 = true;
     if (C.type === "atk" && !cur.id.startsWith("echo")) V.lastAtk = cur.id;
     popS(s, P.x, P.y - P.R - 22, C.icon + C.name);
   }
@@ -3256,7 +3280,9 @@ function v2Tick(s){
   if (P.regenV2 && s.tick % 60 === 0 && P.hp > 0) P.hp = Math.min(P.maxHp, P.hp + P.regenV2);
   for (const E of rd.en){ const e = E.ball; if (e.dead){ e.focus = false; continue; }
     const cev = E.evs.find(v => !v.done && rt >= v.t - v.f && rt < v.t); E.cur = cev || null; e.focus = !!(cev && !cev.fizzled);
-    if (!e.onFizzle) e.onFizzle = () => { const v = E.cur; if (v && e.focus){ v.fizzled = true; e.focus = false; popS(s, e.x, e.y - e.R - 14, "😵좌절"); } };
+    e.v2E = E;
+    if (!e.onFizzle) e.onFizzle = () => { const E2 = e.v2E, v = E2 && E2.cur; if (v && e.focus){ v.fizzled = true; e.focus = false; popS(s, e.x, e.y - e.R - 14, "😵좌절");
+      if (P.breakSh){ v2Shield(s, P, P.breakSh); const nx = E2.evs.find(w => !w.done && !w.fizzled && w !== v); if (nx) nx.f = Math.min(nx.t, nx.f + 0.5 * (P.breakN || 1)); } } };
     for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; if (!ev.fizzled){ e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast" }); } } }
   if (rt >= rd.T){ rd.over = true; P.focus = false; for (const E of rd.en) E.ball.focus = false;
     for (const c of rd.plan) (CD(c.id).type === "power" || c.id === "_blank" ? null : V.disc.push(c.id));   // 파워는 이번 전투에서 사라짐
@@ -3510,7 +3536,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.7";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.8";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
