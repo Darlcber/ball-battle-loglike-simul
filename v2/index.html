@@ -1158,7 +1158,8 @@ function hurt(s, tgt, src, amount, sk){
   d = clamp(d, 0.1, BIG);
   if (tgt.guardT > 0) d *= 0.5; if (tgt.dmgMul) d *= tgt.dmgMul;   // (v2) 수비 태세·철갑
   if (tgt.focus && src && src !== tgt && tgt.onFizzle) tgt.onFizzle(s, src);   // (v2) 정신집중 중 직접 공격을 받으면 좌절 (지속 피해는 src 없음)
-  if (tgt.parryT > 0){ d *= 0.5; if (src && src !== tgt && !src.dead && src.hp > 0){ src.hp -= d * (tgt.parryPow || 1.5); popS(s, src.x, src.y - src.R - 8, "🛡" + fmt(d * (tgt.parryPow || 1.5))); } }   // 반격 방패
+  if (tgt.parryT > 0){ d *= 0.5; if (src && src !== tgt && !src.dead && src.hp > 0){ const rf = s.intDmg ? Math.max(1, Math.round(d * (tgt.parryPow || 1.5))) : d * (tgt.parryPow || 1.5); src.hp -= rf; popS(s, src.x, src.y - src.R - 8, "🛡" + fmt(rf)); } }
+  if (s.intDmg) d = Math.max(1, Math.round(d));   // (v2) 최종 피해는 정수(반올림, 최소 1)   // 반격 방패
   if (tgt.shieldT > 0 && tgt.shieldHp > 0){ const ab = Math.min(tgt.shieldHp, d); tgt.shieldHp -= ab; d -= ab; if (d <= 0) return; }
   tgt.hp -= d; if (tgt.markT > 0) tgt.markAcc += d;
   if (sk && src && SKILL[sk] && SKILL[sk].leech && src.hp > 0) src.hp = Math.min(src.maxHp, src.hp + d * SKILL[sk].leech);   // 피의 낫 흡혈
@@ -3073,7 +3074,7 @@ const V2_SAVE = "ballTowerV2";
 let V2_PDMG = 1, V2_EDMG = 1;   // 연장전을 끈 대신 내 피해 / 적 피해 배율 (끝부분에서 조정)
 const CARD_TYPE = { atk: { name: "공격", col: "#c84a4a" }, skill: { name: "스킬", col: "#3a8ac8" }, power: { name: "파워", col: "#a060e8" }, blank: { name: "공백", col: "#777" }, curse: { name: "저주", col: "#7a4a8a" } };
 // 보호막은 이번 패턴(라운드)이 끝날 때까지만
-function v2Shield(s, me, amt){ amt = (amt + (me.dex || 0)) * (me.skMul || 1); const rd = s.rd, rem = rd && !rd.over ? rd.T - (s.tick - rd.t0) / 60 : 5; me.shieldHp = Math.min(BIG, me.shieldHp + amt); me.shieldT = Math.max(me.shieldT, Math.ceil(rem * 60) + 1); popS(s, me.x, me.y - me.R - 22, "🛡+" + fmt(amt)); }
+function v2Shield(s, me, amt){ amt = Math.round((amt + (me.dex || 0)) * (me.skMul || 1)); if (amt <= 0) return; const rd = s.rd, rem = rd && !rd.over ? rd.T - (s.tick - rd.t0) / 60 : 5; me.shieldHp = Math.min(BIG, me.shieldHp + amt); me.shieldT = Math.max(me.shieldT, Math.ceil(rem * 60) + 1); popS(s, me.x, me.y - me.R - 22, "🛡+" + fmt(amt)); }
 // 빈 시간 = 이번 라운드에서 내 카드가 없는 시간 (공백 카드 + 끝에 남는 시간)
 function v2Blank(s){ const rd = s.rd; if (!rd) return 0; let b = 0, end = 0; for (const c of rd.plan){ if (c.id === "_blank") b += c.end - c.start; end = c.end; } return b + Math.max(0, rd.T - end); }
 // X초 카드 길이: 패턴 끝까지 남은 시간 (계획 화면에서 계산해 둠)
@@ -3177,12 +3178,12 @@ const CARDS = {
   oath:    { name: "피의 서약", icon: "🩸", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "체력 3을 잃고, 다음 카드 집중 0초", fire: (s, me) => { v2SelfCost(s, me, 3); me.nextFocus0 = true; } },
   sidestep:{ name: "옆걸음", icon: "👣", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "옆으로 살짝 비켜섬", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(foe.y - me.y, foe.x - me.x) + (s.rng() < 0.5 ? 1.57 : -1.57); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.25); me.dashMult = 2.5; } },
   brace:   { name: "웅크리기", icon: "🐢", type: "skill", cast: 1, focus: 0, rar: 1, desc: "시전 동안 받는 피해 -50%", fire: (s, me, foe, dur) => { me.guardT = T(dur); } },
-  breath:  { name: "숨 고르기", icon: "😮‍💨", type: "skill", cast: 0.8, focus: 0.5, rar: 1, desc: "체력 3% 회복", fire: (s, me, foe, dur, m = 1) => { const h = me.maxHp * 0.03 * m; me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "+" + fmt(h)); } },
+  breath:  { name: "숨 고르기", icon: "😮‍💨", type: "skill", cast: 0.8, focus: 0.5, rar: 1, desc: "체력 3% 회복", fire: (s, me, foe, dur, m = 1) => { const h = Math.round(me.maxHp * 0.03 * m); me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "+" + fmt(h)); } },
   guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "보호막 3 (이번 패턴 동안)", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 3 * m) },
   ghost:   { name: "유령화", icon: "👻", type: "skill", cast: 1.5, focus: 0, rar: 3, desc: "시전 동안 모든 공격을 피함", fire: (s, me, foe, dur) => { me.invulnT = Math.max(me.invulnT, T(dur)); } },
   buffer:  { name: "완충", icon: "🔰", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 직접 공격 1번을 완전히 막음", fire: (s, me, foe, dur, m = 1) => { me.blockN = (me.blockN || 0) + (m > 1 ? 2 : 1); } },
   evade:   { name: "회피", icon: "💨", type: "skill", cast: 1, focus: 0, rar: 1, desc: "적 반대쪽으로 빠르게 물러남", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(me.y - foe.y, me.x - foe.x); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.4); me.dashMult = 3; } },
-  aid:     { name: "응급 처치", icon: "✚", type: "skill", cast: 3, focus: 2.5, rar: 1, desc: "체력 12% 회복", fire: (s, me, foe, dur, m = 1) => { const h = me.maxHp * 0.12 * m; me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "✚" + fmt(h)); } },
+  aid:     { name: "응급 처치", icon: "✚", type: "skill", cast: 3, focus: 2.5, rar: 1, desc: "체력 12% 회복", fire: (s, me, foe, dur, m = 1) => { const h = Math.round(me.maxHp * 0.12 * m); me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "✚" + fmt(h)); } },
   parry:   { name: "반격", icon: "🤺", type: "skill", cast: 2, focus: 0, rar: 2, desc: "시전 동안 받는 피해 -50%, 때린 적에게 150% 되돌림", fire: (s, me, foe, dur, m = 1) => { me.parryT = T(dur); me.parryPow = 1.5 * m; } },
   wall:    { name: "방벽", icon: "🧱", type: "skill", cast: 2.5, focus: 1.5, rar: 1, desc: "보호막 9 (이번 패턴 동안)", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 9 * m) },
   // ---- 파워 (이번 전투 내내, 한 번 쓰면 이번 전투에서 사라짐) ----
@@ -3190,7 +3191,7 @@ const CARDS = {
   might:   { name: "근력", icon: "💪", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "힘 +3 (이번 전투)", fire: (s, me, foe, dur, m = 1) => v2Str(s, me, rint(3, m)) },
   iron:    { name: "철갑", icon: "🪨", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 받는 피해 -25%", fire: (s, me, foe, dur, m = 1) => { me.dmgMul = (me.dmgMul || 1) * Math.pow(0.75, m); } },
   calm:    { name: "평정", icon: "🧘", type: "power", cast: 3.5, focus: 3, rar: 3, desc: "다음 라운드부터 정신집중 시간 -30%", fire: (s, me, foe, dur, m = 1) => { s.v2.focusMul *= Math.pow(0.7, m); } },
-  thorn:   { name: "가시 갑옷", icon: "🌵", type: "power", cast: 3, focus: 2.5, rar: 1, desc: "나를 때린 적에게 피해 2", fire: (s, me, foe, dur, m = 1) => { me.fx.thorns = (me.fx.thorns || 0) + 2 * m * V2_PDMG; } },
+  thorn:   { name: "가시 갑옷", icon: "🌵", type: "power", cast: 3, focus: 2.5, rar: 1, desc: "나를 때린 적에게 피해 2", fire: (s, me, foe, dur, m = 1) => { me.fx.thorns = (me.fx.thorns || 0) + Math.round(2 * m * V2_PDMG); } },
   regen:   { name: "재생", icon: "🌱", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 매초 체력 0.5 회복", fire: (s, me, foe, dur, m = 1) => { me.regenV2 = (me.regenV2 || 0) + 0.5 * m; } },
   orbs:    { name: "궤도 구슬", icon: "🔮", type: "power", cast: 3, focus: 2, rar: 2, desc: "내 주위를 도는 구슬 +2 (닿으면 3)", fire: (s, me, foe, dur, m = 1) => { for (let i = 0; i < (m > 1 ? 3 : 2); i++) EFF.orbs(s, me, foe, wab("orbs", 0.5)); } }
 };
@@ -3297,7 +3298,7 @@ function startFightV2(r){
   pc.atk = 12 + (pc.atk - r.atk); pc.def = Math.max(0, pc.def - r.def);   // (v2.15) 기본 공격력·방어력 0: 공격 배율 1, 방어 0 (유물 보너스만 남음)
   const ec = r.enc.map(e => { const c = { ...e, def: 0, abilities: [], v2effs: e.v2effs || e.abilities.map(a => a.eff) }; delete c.scanMul; return c; });
   const s = makeBattle(pc, ec, r.seed * 100 + r.floor * 7 + r.retry);
-  s.noOT = true; s.noAttr = true; s.maxTicks = T(600); s.dmgToE = V2_PDMG; s.dmgToP = V2_EDMG;   // 연장전 끔, 대신 양쪽 피해 배율
+  s.noOT = true; s.noAttr = true; s.intDmg = true; s.maxTicks = T(600); s.dmgToE = V2_PDMG; s.dmgToP = V2_EDMG;   // 연장전 끔, 대신 양쪽 피해 배율
   s.hooks.drink = () => !!usePotion(s, r, 0, true);
   s.v2 = { draw: (d => d.filter(k => !CD(k).innate).concat(d.filter(k => CD(k).innate)))(v2Shuffle(r.cards.map(c => c.id), s.rng)), disc: [], hand: [], bombs: [], kept: [], exh: [], timed: [], xDur: 2, round: 0, focusMul: 1, played: 0, lastAtk: null };
   s.balls.slice(1).forEach(e => { e.v2pi = Math.floor(s.rng() * 4); });
@@ -3370,8 +3371,8 @@ function v2Tick(s){
     popS(s, P.x, P.y - P.R - 22, C.icon + C.name);
   }
   if (P.guardT > 0) P.guardT--;
-  if (P.leechT > 0){ P.leechT--; for (const f of foesOf(s, P)) if (Math.hypot(f.x - P.x, f.y - P.y) < f.R + P.R + 2 && !(f.leechCd > s.tick)){ f.leechCd = s.tick + 30; const d = 10 * (P.atk / 12); hurt(s, f, P, d); P.hp = Math.min(P.maxHp, P.hp + d); popS(s, P.x, P.y - P.R - 14, "🩸+" + fmt(d)); } }
-  if (P.regenV2 && s.tick % 60 === 0 && P.hp > 0) P.hp = Math.min(P.maxHp, P.hp + P.regenV2);
+  if (P.leechT > 0){ P.leechT--; for (const f of foesOf(s, P)) if (Math.hypot(f.x - P.x, f.y - P.y) < f.R + P.R + 2 && !(f.leechCd > s.tick)){ f.leechCd = s.tick + 30; const d = Math.round(4 * (P.atk / 12)); hurt(s, f, P, d); P.hp = Math.min(P.maxHp, P.hp + d); popS(s, P.x, P.y - P.R - 14, "🩸+" + fmt(d)); } }
+  if (P.regenV2 && s.tick % 60 === 0 && P.hp > 0){ P.regenAcc = (P.regenAcc || 0) + P.regenV2; const h = Math.floor(P.regenAcc + 1e-9); if (h > 0){ P.regenAcc -= h; P.hp = Math.min(P.maxHp, P.hp + h); } }   // 정수로만 회복
   for (const E of rd.en){ const e = E.ball; if (e.dead){ e.focus = false; continue; }
     const cev = E.evs.find(v => !v.done && rt >= v.t - v.f && rt < v.t); E.cur = cev || null; e.focus = !!(cev && !cev.fizzled);
     e.v2E = E;
@@ -3717,7 +3718,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.18";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.19";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -3803,6 +3804,7 @@ chooseRoute = function(i){ const r = runState, o = r.routes[i];
   .ccard:disabled{opacity:.4}.hcard .hnm{white-space:nowrap}`; document.head.appendChild(st); }
 
 // v2 난이도: 레벨업이 없어 플레이어가 안 크므로 적 성장을 줄이고 시작 체력을 늘림 (봇 측정 기준)
+for (const k in EARLY) delete EARLY[k];   // (v2.19) 옛 초반 배율(1~5층 체력 ×0.3~0.9) 없앰 → 1층 적 체력 = 기본 12
 ENEMY_HP0 = 12; ENEMY_ATK0 = 2.6; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;   // (v2.16) 내 체력 100·배율 ×1 기준
 // (v2.10) 연장전을 끈 대신 양쪽 피해 ×2 (봇 측정: 연장전 있을 때와 전투 길이·통과율 비슷) — 카드 설명의 피해 숫자도 ×2로 보이게
 V2_PDMG = 1; V2_EDMG = 1;   // (v2.16) 피해 배율 없음(양쪽 ×1). 대신 적 체력·공격과 내 체력(100)으로 맞춤
