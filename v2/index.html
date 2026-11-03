@@ -2331,7 +2331,7 @@ function drawScene(c, st, preview){
   const P = st.balls[0], es = st.balls.slice(1), tot = es.reduce((a, e) => a + Math.max(0, e.hp), 0), totMax = es.reduce((a, e) => a + e.maxHp, 0), n = es.filter(e => !e.dead).length;
   const pSh = P.shieldHp > 0 && P.shieldT > 0, shE = es.filter(e => !e.dead && e.shieldHp > 0 && e.shieldT > 0);
   const eSh = shE.length ? { r: shE.reduce((a, e) => a + e.shieldHp, 0) / totMax, a: shieldAlpha(shE.reduce((m, e) => e.shieldT < m.shieldT ? e : m, shE[0])) } : null;
-  drawBar(c, 10, 130, P.hp / P.maxHp, "#4aa3ff", `나 ${fmt(P.hp)}/${fmt(P.maxHp)}  ⚔${fmt(P.atk * (1 + P.atkBonus))}${pSh ? "  🛡" + fmt(P.shieldHp) : ""}`, pSh ? { r: P.shieldHp / P.maxHp, a: shieldAlpha(P) } : null);
+  drawBar(c, 10, 130, P.hp / P.maxHp, "#4aa3ff", `나 ${fmt(P.hp)}/${fmt(P.maxHp)}${st.v2 ? "" : "  ⚔" + fmt(P.atk * (1 + P.atkBonus))}${pSh ? "  🛡" + fmt(P.shieldHp) : ""}`, pSh ? { r: P.shieldHp / P.maxHp, a: shieldAlpha(P) } : null);
   drawBar(c, W - 140, 130, tot / totMax, es[0].tag === "boss" ? "#b05aff" : es[0].tag === "elite" ? "#ff9a3c" : "#ff5a6a", `적 ${n}/${es.length}마리  ${fmt(tot)}/${fmt(totMax)}${eSh ? "  🛡" + fmt(shE.reduce((a, e) => a + e.shieldHp, 0)) : ""}`, eSh);
   c.fillStyle = "#ffe066"; c.font = "bold 16px system-ui"; c.textAlign = "center"; c.fillText(`${runState.floor}층`, W / 2, 20);
   c.fillStyle = "#889"; c.font = "12px system-ui"; c.fillText(`${Math.floor(st.tick / 60)}초`, W / 2, H - 6);
@@ -3289,7 +3289,8 @@ function v2Shuffle(a, rng){ for (let i = a.length - 1; i > 0; i--){ const j = Ma
 function startFightV2(r){
   ensureBoss(r);
   const pc = playerCfg(r); delete pc.scanMul; pc.abilities = [];
-  const ec = r.enc.map(e => { const c = { ...e, abilities: [], v2effs: e.v2effs || e.abilities.map(a => a.eff) }; delete c.scanMul; return c; });
+  pc.atk = 12 + (pc.atk - r.atk); pc.def = Math.max(0, pc.def - r.def);   // (v2.15) 기본 공격력·방어력 0: 공격 배율 1, 방어 0 (유물 보너스만 남음)
+  const ec = r.enc.map(e => { const c = { ...e, def: 0, abilities: [], v2effs: e.v2effs || e.abilities.map(a => a.eff) }; delete c.scanMul; return c; });
   const s = makeBattle(pc, ec, r.seed * 100 + r.floor * 7 + r.retry);
   s.noOT = true; s.noAttr = true; s.maxTicks = T(600); s.dmgToE = V2_PDMG; s.dmgToP = V2_EDMG;   // 연장전 끔, 대신 양쪽 피해 배율
   s.hooks.drink = () => !!usePotion(s, r, 0, true);
@@ -3313,7 +3314,7 @@ function v2PrepRound(s){
   if (P0.ritualN) v2Str(s, P0, P0.ritualN);   // 의식
   if (P0.elastic) P0.accel = Math.min(ACCEL_MAX, (P0.accel || 0) + P0.elastic);   // 탄력
   let sum = 0; const cap = Math.ceil(L / 2);   // 뽑는 장수 상한 = 패턴 길이 ÷ 2(올림) — 짧은 카드만 들고 가면 시간이 빔
-  while (sum <= L && V.hand.length < cap){
+  while (sum < L - 1e-6 && V.hand.length < cap){   // (v2.15) 합이 패턴 길이에 닿으면 그만 뽑음
     if (!V.draw.length){ if (!V.disc.length) break; V.draw = v2Shuffle(V.disc.splice(0), s.rng); }
     const id = V.draw.pop(); V.hand.push(id); sum += CD(id).cast;
   }
@@ -3328,8 +3329,9 @@ function v2Timeline(s){   // 지금 손패 순서대로 시작·집중 끝·끝 
   let t = 0; return s.v2.hand.map((id, i) => { const c = CD(id), st = t; t += c.cast; return { i, id, start: st, fEnd: st + c.focus * s.v2.focusMul, end: t }; });
 }
 function v2Execute(s){
-  const plan = v2Timeline(s), sum = plan.length ? plan[plan.length - 1].end : 0;
-  s.rd = { t0: s.tick, L: s.rdPlan.L, T: Math.max(s.rdPlan.L, sum), plan, en: s.rdPlan.en, over: false, cur: null };
+  const L = s.rdPlan.L, all = v2Timeline(s), plan = all.filter(c => c.end <= L + 1e-3);   // (v2.15) 더미 타임 없음: 패턴 길이를 넘는 카드는 못 씀
+  const over = all.filter(c => c.end > L + 1e-3).map(c => c.id).filter(id => id !== "_blank"); if (over.length) s.v2.unused = (s.v2.unused || []).concat(over);
+  s.rd = { t0: s.tick, L, T: L, plan, en: s.rdPlan.en, over: false, cur: null };
   for (const b of s.balls) if (b.metal && !b.dead) v2Shield(s, b, b.metal);   // 금속화
 }
 function v2Tick(s){
@@ -3432,30 +3434,33 @@ function renderPlan(){
   const s = state; if (!s) return; const V = s.v2;
   if (!s.planning){ v2PrepRound(s); s.rd = null; s.planning = true; V.placed = []; V.anim = true; planInfo = ""; }   // 라운드마다 한 번만 뽑음
   phase = "plan"; panel.classList.add("plan");
-  { const pl = V.placed.filter(x => x !== "B"), nx = pl.filter(i => CD(V.hand[i]).x).length, other = pl.filter(i => !CD(V.hand[i]).x).reduce((a, i) => a + CD(V.hand[i]).cast, 0);
-    V.xDur = Math.max(1, Math.round((s.rdPlan.L - other) / Math.max(1, nx) * 10) / 10); }   // X초 카드 = 패턴 끝까지 남은 시간
-  {   // 공백 카드: 패턴 길이 - 올린 카드 합 (다 안 올려도 이걸로 시간을 채울 수 있음)
-    const realSum = V.placed.filter(x => x !== "B").reduce((a, i) => a + CD(V.hand[i]).cast, 0);
+  const pl0 = V.placed.filter(x => x !== "B"), nx = pl0.filter(i => CD(V.hand[i]).x).length, other = pl0.filter(i => !CD(V.hand[i]).x).reduce((a, i) => a + CD(V.hand[i]).cast, 0);
+  V.xDur = Math.max(1, Math.round((s.rdPlan.L - other) / Math.max(1, nx) * 10) / 10);   // X초 카드 = 남은 시간 전부
+  {   // 공백: 제자리에서 (패턴 길이 - 올린 카드 합)만큼. 공백을 올려도 카드를 더 올릴 수 있고 그만큼 공백이 줄어듦
+    const realSum = pl0.reduce((a, i) => a + CD(V.hand[i]).cast, 0);
     V.blankDur = Math.max(0, Math.round((s.rdPlan.L - realSum) * 10) / 10);
     if (V.blankDur < 0.1) V.placed = V.placed.filter(x => x !== "B");
   }
+  const room = s.rdPlan.L - other - nx * 1;   // 새 카드를 올릴 수 있는 시간 (X초 카드는 최소 1초)
+  const fits = id => (CD(id).x ? (nx ? 1 : 1) : CD(id).cast) <= room + 1e-6 && !(CD(id).x && nx);   // X초 카드는 한 장만
   const tl = v2Placed(s), sumAll = V.hand.reduce((a, id) => a + CD(id).cast, 0), sumP = tl.length ? tl[tl.length - 1].end : 0;
-  const L = s.rdPlan.L, T = Math.max(L, sumAll), pct = t => (t / T * 100).toFixed(2) + "%", all = V.placed.filter(x => x !== "B").length === V.hand.length || V.placed.includes("B") || sumP >= L - 0.05;   // 패턴 길이를 다 채웠으면 실행 가능
+  const L = s.rdPlan.L, T = L, pct = t => (Math.min(t, T) / T * 100).toFixed(2) + "%";
+  const fitLeft = V.hand.some((id, i) => !V.placed.includes(i) && fits(id)), all = V.placed.includes("B") || sumP >= L - 0.05 || !fitLeft;   // 실행: 공백을 올렸거나, 다 찼거나, 더 올릴 카드가 없으면   // 패턴 길이를 다 채웠으면 실행 가능
   let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
   const enemyRows = s.rdPlan.en.map((E, ei) => `<div class="tlrow"><div class="tlname en" data-en="${ei}">${E.ball.icon}</div><div class="tlbar">
       <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
       ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-en="${ei}" data-ev="${vi}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b><i class="evd">${evInfo(E.ball, v.sk, s.balls[0]).txt}</i></div>`).join("")}</div></div>`).join("");
   const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CD(c.id);
       return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.x ? "X=" : ""}${C.cast}초</small></span></div>${c.id.startsWith("timebomb") ? `<div class="tlboom" style="left:${pct(Math.min(T, c.start + C.focus * V.focusMul + Math.max(0.5, 3 - (s.balls[0].demoM ? 1 : 0))))}">💥</div>` : ""}`; }).join("")}
-      ${sumAll > 0 ? `<div class="tlghost" style="left:${pct(sumP)};width:${pct(Math.max(0, sumAll - sumP))}"></div>` : ""}<div class="tldrop" id="tldrop"></div></div></div>`;
-  const hand = V.hand.map((id, hi) => { const C = CD(id), used = V.placed.includes(hi);
-    return `<div class="hcard ${C.type}${used ? " used" : ""}${V.anim ? " drawin" : ""}" data-hi="${hi}" style="${V.anim ? `animation-delay:${(hi * 0.13).toFixed(2)}s` : ""}"><div class="hic">${C.icon}</div><div class="hnm">${C.name}</div><div class="hct">${C.x ? "X=" : ""}${C.cast}초</div></div>`; }).join("")
+      <div class="tldrop" id="tldrop"></div></div></div>`;
+  const hand = V.hand.map((id, hi) => { const C = CD(id), used = V.placed.includes(hi), nofit = !used && !fits(id);
+    return `<div class="hcard ${C.type}${used ? " used" : ""}${nofit ? " nofit" : ""}${V.anim ? " drawin" : ""}" data-hi="${hi}" style="${V.anim ? `animation-delay:${(hi * 0.13).toFixed(2)}s` : ""}"><div class="hic">${C.icon}</div><div class="hnm">${C.name}</div><div class="hct">${C.x ? "X=" : ""}${C.cast}초</div></div>`; }).join("")
     + (V.blankDur >= 0.1 ? `<div class="hcard blank${V.placed.includes("B") ? " used" : ""}" data-hi="B"><div class="hic">⬜</div><div class="hnm">공백</div><div class="hct">${V.blankDur}초</div></div>` : "");
-  panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 내 패 ${sumAll.toFixed(1)}초${sumAll > L ? ` (더미 ${(sumAll - L).toFixed(1)}초)` : ""}</div>
+  panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 올린 시간 ${Math.min(L, sumP).toFixed(1)} / ${L}초</div>
     <div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}</div></div>${enemyRows}${myRow}</div>
     <div class="handrow"><div class="pile" title="뽑을 카드">🂠<small>${V.draw.length}</small></div>${hand}<div class="pile disc" title="버린 카드">🗑<small>${V.disc.length}</small></div></div>
     <div class="small pinfo" id="pinfo">${planInfo || "패를 누른 순서대로 타임라인에 올라가요 · 다 안 올려도 ⬜공백(남은 시간)을 올리면 실행 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 끌면 자리 이동 · 적 아이콘·행동을 누르면 적 정보"}</div>
-    <div class="row" style="gap:6px">${potRowHtml()}<button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : `패를 다 올리거나 ⬜공백을 올려 주세요`}</button></div></div>`;
+    <div class="row" style="gap:6px">${potRowHtml()}<button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : `시간을 다 채우거나 ⬜공백을 올려 주세요`}</button></div></div>`;
   V.anim = false;
   const showInfo = id => { const C = CD(id); planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
   // 누르기/꾹 누르기/끌기 판별
@@ -3470,11 +3475,11 @@ function renderPlan(){
   // 적 정보: 적 아이콘을 누르면 능력치·특성·패턴, 행동 표시를 누르면 그 행동 설명
   const setInfo = h => { planInfo = h; const el = document.getElementById("pinfo"); if (el) el.innerHTML = h; };
   panel.querySelectorAll(".tlname.en").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], e = E.ball, c = e.cfg, P = patsOf(c);
-    setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} ⚔${fmt(e.atk * (1 + e.atkBonus))} 🛡${e.def}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
+    setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} 💪힘 ${+((e.atkBonus || 0) * 10).toFixed(1)}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
   panel.querySelectorAll(".tlev[data-ev]").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], v = E.evs[+el.dataset.ev], ty = actType(v.sk);
     setInfo(`<b>${E.ball.icon} ${SK_FULL(v.sk)}</b> <span class="evc ${ty}">${{ atk: "공격", skill: "스킬", power: "파워" }[ty]}</span> · 정신집중 ${v.f}초 (${(v.t - v.f).toFixed(1)}~${v.t}초, 이때 직접 공격하면 좌절) → ${v.t}초 발동${(i => i.d != null ? ` · 예상 피해 <b>${Math.round(i.d)}${EV_PER[v.sk] || ""}</b>` : "")(evInfo(E.ball, v.sk, s.balls[0]))}${EV_BASE[v.sk] != null || v.sk === "freeze" ? (EV_TARGET.has(v.sk) ? " · 🎯 타겟팅(피할 수 없음, 막거나 끊어야 함)" : " · ↗ 논타겟팅(움직임으로 피할 수 있음)") : ""} · ${SKILL[v.sk] ? SKILL[v.sk].desc || "" : ""}`); });
   panel.querySelectorAll(".hcard").forEach(el => { const hi = el.dataset.hi === "B" ? "B" : +el.dataset.hi;
-    press(el, () => { if (!V.placed.includes(hi)){ V.placed.push(hi); renderPlan(); } }, () => showInfo(hi === "B" ? "_blank" : V.hand[hi])); });
+    press(el, () => { if (!V.placed.includes(hi)){ if (hi !== "B" && !fits(V.hand[hi])){ setInfo(`⏱ 시간이 모자라요 (남은 ${Math.max(0, room).toFixed(1)}초). 다른 카드를 빼거나 공백으로 채워 주세요`); return; } V.placed.push(hi); renderPlan(); } }, () => showInfo(hi === "B" ? "_blank" : V.hand[hi])); });
   const bar = document.getElementById("tlmine"), drop = document.getElementById("tldrop");
   panel.querySelectorAll(".tlcard").forEach(el => { const k = +el.dataset.k; let to = k;
     press(el, () => { V.placed.splice(k, 1); renderPlan(); }, () => showInfo(V.placed[k] === "B" ? "_blank" : V.hand[V.placed[k]]), {
@@ -3571,11 +3576,11 @@ function v2Portrait(cv, b){ const c = cv.getContext("2d"), z = cv.width; c.clear
 function v2Card(b, i){ const hp = Math.max(0, b.hp), p = Math.max(0, Math.min(1, hp / b.maxHp));
   return `<div class="pcard${b.dead ? " dead" : ""}" data-pb="${i}"><div class="ptop"><canvas class="pimg" width="96" height="96" data-pc="${i}"></canvas>
     <div class="pinfo"><div class="pname">${b.id === 0 ? "나" : (b.icon || "") + " " + b.name}</div><div class="php"><i id="phb${i}" style="width:${(p * 100).toFixed(1)}%"></i><span id="pht${i}">${fmt(hp)}/${fmt(b.maxHp)}</span></div>
-    <div class="pbase">⚔${fmt(b.atk * (1 + (b.atkBonus || 0)))} 🪖${b.def || 0}</div></div></div><div class="pst" id="pst${i}"></div></div>`; }
+    <div class="pbase">💪힘 ${+((b.atkBonus || 0) * 10).toFixed(1)} · 🪖방어 ${b.def || 0}</div></div></div><div class="pst" id="pst${i}"></div></div>`; }
 function v2StHtml(b, s){ return v2Stats(b, s).map(([ic, nm, v]) => `<span class="stc" title="${nm}">${ic}${v ? `<b>${v}</b>` : ""}</span>`).join("") || `<span class="small" style="opacity:.5">효과 없음</span>`; }
 function v2ShowStats(b){ const s = state, L = v2Stats(b, s), wasPaused = paused; if (phase === "battle") paused = true;   // 읽는 동안 멈춤
   openInfo(`${b.id === 0 ? "🙂 나" : (b.icon || "") + " " + b.name} — ❤${fmt(Math.max(0, b.hp))}/${fmt(b.maxHp)}`,
-    `<div class="small" style="margin-bottom:6px">⚔ 공격력 ${fmt(b.atk * (1 + (b.atkBonus || 0)))} · 🪖 방어 ${b.def || 0} (받는 피해 ×${(12 / (12 + (b.def || 0))).toFixed(2)})</div>` +
+    `<div class="small" style="margin-bottom:6px">💪 힘 ${+((b.atkBonus || 0) * 10).toFixed(1)} (1당 공격 +10%) · 🪖 방어 ${b.def || 0}</div>` +
     (L.length ? L.map(([ic, nm, v, d]) => `<div class="card" style="padding:5px 8px;margin-bottom:4px"><b>${ic} ${nm}</b>${v ? ` <span style="color:#ffe066">${v}</span>` : ""}<div class="small">${d}</div></div>`).join("") : `<div class="small">지금 걸린 효과가 없어요</div>`), el => { const close = () => { closeInfo(); paused = wasPaused; }; document.getElementById("infoX").onclick = close; el.onclick = e => { if (e.target === el) close(); }; }); }
 function renderSidesV2(){
   const s = state; if (!s) return; const B = s.balls;
@@ -3667,7 +3672,7 @@ document.getElementById("bBook").style.display = "none";
   .php i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#e04a5a,#ff7a7a);transition:width .15s}.pcard[data-pb="0"] .php i{background:linear-gradient(90deg,#2f8be0,#5ab0ff)}
   .php span{position:absolute;left:6px;top:0;font-size:10px;font-weight:bold;line-height:14px;text-shadow:0 1px 2px #000}.pbase{font-size:10px;color:#aab}
   .pst{display:flex;flex-wrap:wrap;gap:3px}.stc{font-size:13px;background:#232a4a;border-radius:6px;padding:1px 4px;line-height:1.3}.stc b{font-size:10px;margin-left:1px;color:#ffe066}
-  .hcard.used{opacity:.3}.hcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border:2px dashed #888}.tlcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border-color:#888;border-style:dashed}.hcard .hic{font-size:22px}.hcard .hnm{font-size:11px;font-weight:bold;text-align:center;line-height:1.1}.hcard .hct{font-size:10px;color:#ccd}
+  .hcard.nofit{opacity:.5;filter:grayscale(.85);border-style:dotted}.hcard.used{opacity:.3}.hcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border:2px dashed #888}.tlcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border-color:#888;border-style:dashed}.hcard .hic{font-size:22px}.hcard .hnm{font-size:11px;font-weight:bold;text-align:center;line-height:1.1}.hcard .hct{font-size:10px;color:#ccd}
   .hcard.drawin{animation:drawin .45s cubic-bezier(.2,.8,.3,1.2) backwards}
   @keyframes drawin{from{transform:translate(-260px,30px) rotate(-25deg) scale(.4);opacity:0}to{transform:none;opacity:1}}
   .pinfo{min-height:2.4em}
@@ -3701,9 +3706,9 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.14";   // 화면 위 줄에 보이는 버전 (반영 확인용)
-updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
-infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
+const V2_VER = "2.15";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
+infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
 
 // ----- 카드 고르기 화면 (지우기·강화 공용) -----
@@ -3788,7 +3793,7 @@ chooseRoute = function(i){ const r = runState, o = r.routes[i];
 // v2 난이도: 레벨업이 없어 플레이어가 안 크므로 적 성장을 줄이고 시작 체력을 늘림 (봇 측정 기준)
 ENEMY_ATK0 = 4.5; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;
 // (v2.10) 연장전을 끈 대신 양쪽 피해 ×2 (봇 측정: 연장전 있을 때와 전투 길이·통과율 비슷) — 카드 설명의 피해 숫자도 ×2로 보이게
-V2_PDMG = 2; V2_EDMG = 2;
+V2_PDMG = 2; V2_EDMG = 1.6;   // (v2.15) 방어력 0·더미 타임 삭제로 어려워져 적 피해 2 → 1.6
 (function keywordText(){ for (const id in CARDS){ const c = CARDS[id], t = [c.innate && "선천성", c.retain && "보존", c.ethereal && "휘발성", c.exhaust && "소멸"].filter(Boolean); if (t.length) c.desc = `〔${t.join("·")}〕 ` + c.desc; } })();
 (function scaleCardText(){ const k2 = n => +(n * V2_PDMG).toFixed(1);
   for (const id in CARDS){ const c = CARDS[id]; if (!c.desc) continue;

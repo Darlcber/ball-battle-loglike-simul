@@ -2331,7 +2331,7 @@ function drawScene(c, st, preview){
   const P = st.balls[0], es = st.balls.slice(1), tot = es.reduce((a, e) => a + Math.max(0, e.hp), 0), totMax = es.reduce((a, e) => a + e.maxHp, 0), n = es.filter(e => !e.dead).length;
   const pSh = P.shieldHp > 0 && P.shieldT > 0, shE = es.filter(e => !e.dead && e.shieldHp > 0 && e.shieldT > 0);
   const eSh = shE.length ? { r: shE.reduce((a, e) => a + e.shieldHp, 0) / totMax, a: shieldAlpha(shE.reduce((m, e) => e.shieldT < m.shieldT ? e : m, shE[0])) } : null;
-  drawBar(c, 10, 130, P.hp / P.maxHp, "#4aa3ff", `나 ${fmt(P.hp)}/${fmt(P.maxHp)}  ⚔${fmt(P.atk * (1 + P.atkBonus))}${pSh ? "  🛡" + fmt(P.shieldHp) : ""}`, pSh ? { r: P.shieldHp / P.maxHp, a: shieldAlpha(P) } : null);
+  drawBar(c, 10, 130, P.hp / P.maxHp, "#4aa3ff", `나 ${fmt(P.hp)}/${fmt(P.maxHp)}${st.v2 ? "" : "  ⚔" + fmt(P.atk * (1 + P.atkBonus))}${pSh ? "  🛡" + fmt(P.shieldHp) : ""}`, pSh ? { r: P.shieldHp / P.maxHp, a: shieldAlpha(P) } : null);
   drawBar(c, W - 140, 130, tot / totMax, es[0].tag === "boss" ? "#b05aff" : es[0].tag === "elite" ? "#ff9a3c" : "#ff5a6a", `적 ${n}/${es.length}마리  ${fmt(tot)}/${fmt(totMax)}${eSh ? "  🛡" + fmt(shE.reduce((a, e) => a + e.shieldHp, 0)) : ""}`, eSh);
   c.fillStyle = "#ffe066"; c.font = "bold 16px system-ui"; c.textAlign = "center"; c.fillText(`${runState.floor}층`, W / 2, 20);
   c.fillStyle = "#889"; c.font = "12px system-ui"; c.fillText(`${Math.floor(st.tick / 60)}초`, W / 2, H - 6);
