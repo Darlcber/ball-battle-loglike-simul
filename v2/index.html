@@ -3394,7 +3394,8 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
+const V2_VER = "2.3.1";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
 
