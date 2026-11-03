@@ -3178,7 +3178,7 @@ const CARDS = {
   sidestep:{ name: "옆걸음", icon: "👣", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "옆으로 살짝 비켜섬", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(foe.y - me.y, foe.x - me.x) + (s.rng() < 0.5 ? 1.57 : -1.57); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.25); me.dashMult = 2.5; } },
   brace:   { name: "웅크리기", icon: "🐢", type: "skill", cast: 1, focus: 0, rar: 1, desc: "시전 동안 받는 피해 -50%", fire: (s, me, foe, dur) => { me.guardT = T(dur); } },
   breath:  { name: "숨 고르기", icon: "😮‍💨", type: "skill", cast: 0.8, focus: 0.5, rar: 1, desc: "체력 3% 회복", fire: (s, me, foe, dur, m = 1) => { const h = me.maxHp * 0.03 * m; me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "+" + fmt(h)); } },
-  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "보호막 5 (이번 패턴 동안)", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 5 * m) },
+  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "보호막 3 (이번 패턴 동안)", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 3 * m) },
   ghost:   { name: "유령화", icon: "👻", type: "skill", cast: 1.5, focus: 0, rar: 3, desc: "시전 동안 모든 공격을 피함", fire: (s, me, foe, dur) => { me.invulnT = Math.max(me.invulnT, T(dur)); } },
   buffer:  { name: "완충", icon: "🔰", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 직접 공격 1번을 완전히 막음", fire: (s, me, foe, dur, m = 1) => { me.blockN = (me.blockN || 0) + (m > 1 ? 2 : 1); } },
   evade:   { name: "회피", icon: "💨", type: "skill", cast: 1, focus: 0, rar: 1, desc: "적 반대쪽으로 빠르게 물러남", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(me.y - foe.y, me.x - foe.x); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.4); me.dashMult = 3; } },
@@ -3717,7 +3717,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.17";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.18";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -3803,7 +3803,7 @@ chooseRoute = function(i){ const r = runState, o = r.routes[i];
   .ccard:disabled{opacity:.4}.hcard .hnm{white-space:nowrap}`; document.head.appendChild(st); }
 
 // v2 난이도: 레벨업이 없어 플레이어가 안 크므로 적 성장을 줄이고 시작 체력을 늘림 (봇 측정 기준)
-ENEMY_HP0 = 8; ENEMY_ATK0 = 2.6; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;   // (v2.16) 내 체력 100·배율 ×1 기준
+ENEMY_HP0 = 12; ENEMY_ATK0 = 2.6; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;   // (v2.16) 내 체력 100·배율 ×1 기준
 // (v2.10) 연장전을 끈 대신 양쪽 피해 ×2 (봇 측정: 연장전 있을 때와 전투 길이·통과율 비슷) — 카드 설명의 피해 숫자도 ×2로 보이게
 V2_PDMG = 1; V2_EDMG = 1;   // (v2.16) 피해 배율 없음(양쪽 ×1). 대신 적 체력·공격과 내 체력(100)으로 맞춤
 (function keywordText(){ for (const id in CARDS){ const c = CARDS[id], t = [c.must && "필수", c.innate && "선천성", c.retain && "보존", c.ethereal && "휘발성", c.exhaust && "소멸"].filter(Boolean); if (t.length) c.desc = `〔${t.join("·")}〕 ` + c.desc; } })();
@@ -3812,6 +3812,28 @@ V2_PDMG = 1; V2_EDMG = 1;   // (v2.16) 피해 배율 없음(양쪽 ×1). 대신 
     c.desc = c.desc.replace(/피해 (\d+(?:\.\d+)?)/g, (m, n) => "피해 " + k2(+n)).replace(/\((\d+) × 3\)/, (m, n) => `(${k2(+n)} × 3)`).replace(/최대 (\d+)\)/, (m, n) => `최대 ${k2(+n)})`)
       .replace(/^(\d+) × 눈/, (m, n) => `${k2(+n)} × 눈`).replace(/\((\d+(?:\.\d+)?)씩\)/, (m, n) => `(${k2(+n)}씩)`).replace(/(1초당|1장당) \+(\d+)/, (m, a, n) => `${a} +${k2(+n)}`)
       .replace(/카드 수 × (\d+)/, (m, n) => `카드 수 × ${k2(+n)}`).replace(/\(초당 (\d+)\)/, (m, n) => `(초당 ${k2(+n)})`).replace(/\(닿으면 (\d+)\)/, (m, n) => `(닿으면 ${k2(+n)})`); } })();
+
+// ===== (v2.18) 전투 중 하단 타임라인을 누르면: 일시정지 + 이번 라운드에 확정한 타임라인을 다시 보여주고 지금 시점을 화살표로 =====
+function v2ShowRoundPlan(){
+  const s = state; if (!s || !s.rd || s.rd.over) return; const rd = s.rd, T = rd.T, rt = Math.min(T, (s.tick - rd.t0) / 60), wasPaused = paused; paused = true;
+  const pct = t => (Math.max(0, Math.min(t, T)) / T * 100).toFixed(2) + "%", now = `<div class="tlnow" style="left:${pct(rt)}"></div>`;
+  let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
+  const enemyRows = rd.en.map(E => `<div class="tlrow"><div class="tlname">${E.ball.icon || "👾"}</div><div class="tlbar">
+      <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
+      ${E.evs.map(v => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" style="left:${pct(v.t)};${v.fizzled ? "opacity:.35;text-decoration:line-through" : v.done ? "opacity:.55" : ""}"><b>${SK_LABEL(v.sk)}</b><i class="evd">${v.fizzled ? "😵좌절" : evInfo(E.ball, v.sk, s.balls[0]).txt}</i></div>`).join("")}${now}</div></div>`).join("");
+  const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine">${rd.plan.map(c => { const C = CD(c.id), st = c.fizzled ? "opacity:.35" : c.fired ? "opacity:.55" : "";
+      return `<div class="tlcard ${C.type}${rd.cur === c ? " sel" : ""}" style="left:${pct(c.start)};width:${pct(c.end - c.start)};${st}"><span class="tlfocus" style="width:${((c.fEnd - c.start) / Math.max(0.01, c.end - c.start) * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}${c.fizzled ? " 😵" : ""}<br><small>${(c.end - c.start).toFixed(1)}초</small></span></div>`; }).join("")}${now}</div></div>`;
+  openInfo(`⏸ 라운드 ${s.v2.round} · 지금 ${rt.toFixed(1)} / ${T}초`,
+    `<div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}<div class="tlarrow" style="left:${pct(rt)}">▼</div></div></div>${enemyRows}${myRow}</div>
+     <div class="small" style="margin-top:6px">노란 선 = 지금 · 흐린 칸 = 이미 지나감 · 😵 = 좌절 · 닫으면 이어서 진행</div>`, el => {
+      const close = () => { closeInfo(); paused = wasPaused; }; document.getElementById("infoX").onclick = close; el.onclick = e => { if (e.target === el) close(); }; });
+}
+{ const prevClick = cv.onclick;
+  cv.onclick = e => { const rc = cv.getBoundingClientRect(), y = (e.clientY - rc.top) / rc.height * H;
+    if (state && state.v2 && phase === "battle" && state.rd && !state.rd.over && y > H - 40) return v2ShowRoundPlan();
+    if (prevClick) prevClick(e); }; }
+{ const st = document.createElement("style"); st.textContent = `.tlnow{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:#ffe066;box-shadow:0 0 6px #ffe066;z-index:4;pointer-events:none}
+  .tlarrow{position:absolute;top:-6px;transform:translateX(-50%);color:#ffe066;font-size:13px;z-index:4;pointer-events:none}`; document.head.appendChild(st); }
 
 { const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
 requestAnimationFrame(loop);
