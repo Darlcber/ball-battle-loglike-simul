@@ -9,7 +9,7 @@
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>볼배틀 탑 - 데모 34</title>
+<title>볼배틀 탑 - 데모 35</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;background:#0f1220;color:#fff;font-family:system-ui,sans-serif}
@@ -85,6 +85,7 @@
   .tile .ic{font-size:30px;line-height:1.1}.tiles.big .tile .ic{font-size:42px}.tile .nm{font-weight:bold;font-size:13px}.tile .sb{font-size:11px;color:#c8b8a0}.tile .pr{font-size:13px;color:#ffe066;font-weight:bold}
   .tile.shop{background:linear-gradient(#4a3420,#2e2014);border:2px solid #8a6a3a}.tile.forge{background:linear-gradient(#3a3036,#1e1a1e);border:2px solid #7a5a4a}
   .tile.forge:not(:disabled):active,.tile.shop:not(:disabled):active{transform:scale(.97)}.tile:disabled{opacity:.35}.tile.sold .pr{color:#aaa}
+  .wbook{border-collapse:collapse;font-size:11px;width:100%}.wbook th,.wbook td{border-bottom:1px solid #2a3060;padding:3px 4px;text-align:left;vertical-align:top}.wbook th{color:#ffe066}.wbook tr.own td{background:#3a3418}
   .decklist{display:flex;flex-direction:column;gap:0;padding-left:26px}
   .decklist .sentc{box-sizing:border-box;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:6px;border-width:1px;margin-bottom:0;overflow:visible}
   .decklist .sentc .st{flex:1;min-width:0;font-size:12px;color:#ffe9a8;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -165,7 +166,7 @@
 </head>
 <body>
 <div id="top"><span id="hud"></span>
-  <button id="bDeck" title="덱">📜</button><button id="bInfo" title="정보">📊</button><button id="bRelic" title="유물">🏺</button><button id="bPot" title="물약">🧪</button><button id="bAttr" title="속성·시너지·상성">🧬</button><button id="bDice" title="주사위">🎲</button><button id="bDev" class="dbg" title="개발 도구">🛠</button>
+  <button id="bDeck" title="덱">📜</button><button id="bBook" title="무기 도감">🗡</button><button id="bInfo" title="정보">📊</button><button id="bRelic" title="유물">🏺</button><button id="bPot" title="물약">🧪</button><button id="bAttr" title="속성·시너지·상성">🧬</button><button id="bDice" title="주사위">🎲</button><button id="bDev" class="dbg" title="개발 도구">🛠</button>
   <button id="speed">1배속</button><button id="pause" disabled>⏸</button><button id="skip" disabled title="결과로 건너뛰기">⏭</button><button id="newRunBtn" title="새 게임 (두 번 탭)">🔄</button><button id="bFull" title="전체 화면">⛶</button>
 </div>
 <div id="main">
@@ -672,7 +673,7 @@ const pw = (me, base, ab) => Math.min(BIG, base * me.atk * (1 + me.atkBonus) / 1
 const CHAIN_DECAY = 0.7, CHAIN_WINDOW = 60;   // 같은 스킬을 1초(60틱) 안에 다시 쓰면 그 1초 안에 쓴 횟수만큼 위력 ×0.7 (최저 ×0.34)
 // 투사체 스킬: 발동하면 잠깐(0.2초) 멈춰 조준 → 발사 → 발사 반대 방향으로 약한 반동. 상대의 움직임을 예측해서 쏨
 const SHOT_AIM = 12, SHOT_RECOIL = 5, SHOT_LEAD = 0.4;
-function mkShot(s, me, foe, ab, base, spd, life, homing, r, col){
+function mkShot(s, me, foe, ab, base, spd, life, homing, r, col){   // (옛 무기용)
   me.shotQ.push({ t: SHOT_AIM, ab, base, spd: spd * ((me.mod[ab.eff] || {}).spd || 1), life, homing, r, col, mul: me.castMul || 1 });
   me.aimT = Math.max(me.aimT, SHOT_AIM);
 }
@@ -689,7 +690,8 @@ function releaseShot(s, me, q){
   if (s.shots.length >= 40){ s.shots[s.shots.length - 1].dmg = Math.min(BIG, s.shots[s.shots.length - 1].dmg + d * 0.5); return; }
   const a = aimAngle(me, foe, q.spd);
   s.shots.push({ owner: me.id, sk: q.ab.eff, x: me.x + Math.cos(a) * me.R * 0.6, y: me.y + Math.sin(a) * me.R * 0.6, vx: Math.cos(a) * q.spd, vy: Math.sin(a) * q.spd, dmg: d, life: q.life, homing: q.homing, hit: [], bnc: 0, r: q.r, col: q.col });
-  me.rvx = -Math.cos(a) * SHOT_RECOIL; me.rvy = -Math.sin(a) * SHOT_RECOIL;   // 반동
+  if (q.extra) Object.assign(s.shots[s.shots.length - 1], q.extra);
+  me.rvx = -Math.cos(a) * SHOT_RECOIL * (q.recoil || 1); me.rvy = -Math.sin(a) * SHOT_RECOIL * (q.recoil || 1);   // 반동
 }
 const EFF = {
   spin: (s, me, foe, ab) => {
@@ -771,13 +773,133 @@ const EFF = {
   heal5: (s, me, foe, ab) => { if (me.curseT > 0) return; me.hp = Math.min(me.maxHp, me.hp + Math.min(BIG, 5 * me.mod.heal5.pow)); },
   atk: (s, me, foe, ab) => { me.atkBonus = Math.min(BIG, me.atkBonus + 0.05 * me.mod.atk.pow); }
 };
+// ================= 무기 풀 (데모 35) =================
+// 거리: 근(가까이) / 중 / 원(멀리). dmg = 기본 위력(공격력 12 기준 피해), area = 범위, cast = 시전 시간(초), attrs = 속성(대부분 없음, 대장간 화로에서 부여)
+// 옛 공격 스킬(회전 베기·투사체 등)은 적 전용으로 남김(legacy).
+const WEAPONS = {
+  stick:     { icon: "🪵", label: "나무 막대기", range: "근", dmg: "5", area: "55", cast: 1.5, rar: 0, start: true, gim: "적에게 달려들어 툭 침 (시작 무기)" },
+  chargeshot:{ icon: "🎯", label: "차지샷", range: "원", dmg: "3 + 1.5×t²", cast: 1.5, rar: 1.6, speedy: true, gim: "첫 호출부터 기를 모음. 다음 호출까지 지난 시간 t초(최대 8초)의 제곱만큼 강해져 발사" },
+  webline:   { icon: "🕸", label: "거미줄", range: "중", dmg: "4/0.5초", cast: 1, rar: 1.6, gim: "호출한 자리와 다음 호출 자리를 잇는 거미줄(6초). 닿은 적은 느려지고 피해" },
+  gatling:   { icon: "🔫", label: "속사포", range: "원", dmg: "3.5 × N발", cast: 2, rar: 1.2, speedy: true, gim: "이번 전투에서 한 번이라도 실행된 문장 수(N)만큼 연발" },
+  ricochet:  { icon: "🪃", label: "튕김 칼날", range: "중", dmg: "9 (튕길 때마다 ×1.5)", cast: 2, rar: 2.2, speedy: true, gim: "벽에 4번까지 튕기며, 튕길 때마다 위력 ×1.5" },
+  detonator: { icon: "💣", label: "원격 지뢰", range: "중", dmg: "34 (설치 후 1초마다 +15%, 최대 ×3)", area: "70", cast: 2, rar: 1.6, aoe: true, gim: "설치해 두고, 다음 호출 때 한꺼번에 기폭" },
+  hook:      { icon: "🪝", label: "갈고리", range: "중", dmg: "8", cast: 1.5, rar: 2.2, gim: "적을 내 앞으로 끌어옴" },
+  parry:     { icon: "🛡", label: "반격 방패", range: "근", dmg: "받은 피해 ×1.5", cast: 1, rar: 1.6, gim: "2.5초간 받는 피해 -50%, 때린 적에게 받은 피해의 150%를 되돌림" },
+  combo:     { icon: "⚔", label: "연속 베기", range: "근", dmg: "9 × 연속 횟수(최대 5)", area: "70", cast: 2, rar: 2.2, aoe: true, gim: "다른 문장 실행 없이 이 문장이 연달아 실행될수록 타수가 늘어남" },
+  orbs:      { icon: "🔮", label: "궤도 구슬", range: "근", dmg: "6/접촉", cast: 1.5, rar: 1.6, gim: "내 주위를 도는 구슬 +1 (최대 6, 전투 내내 유지)" },
+  meteor:    { icon: "☄", label: "운석", range: "원", dmg: "70", area: "60", cast: 3, rar: 1.2, aoe: true, gim: "적 자리에 표식, 1.2초 뒤 떨어짐 (피할 수 있음)" },
+  gamble:    { icon: "🎲", label: "도박 주사위", range: "원", dmg: "5 × 눈(1~6)", cast: 1.5, rar: 2.2, gim: "6이 나오면 다음 무기 위력 ×2" },
+  scythe:    { icon: "🩸", label: "피의 낫", range: "근", dmg: "16 × (1 + 2×잃은 체력 비율)", area: "85", cast: 2, rar: 1.2, aoe: true, leech: 0.2, gim: "체력이 적을수록 강함, 피해의 20% 흡혈" },
+  sniper:    { icon: "🔭", label: "저격총", range: "원", dmg: "거리÷30 × 4 (최대 70)", cast: 3, rar: 1.6, gim: "즉시 명중. 멀수록 강하고 가까우면 약함" },
+  vortex:    { icon: "🌀", label: "회오리", range: "중", dmg: "3/0.3초", area: "55", cast: 2, rar: 1.6, aoe: true, gim: "내 자리에 4초간 적을 빨아들이는 회오리" },
+  echo:      { icon: "🪞", label: "메아리", range: "-", dmg: "직전 무기 ×0.7", cast: 1, rar: 0.7, gim: "직전에 실행된 무기를 위력 70%로 한 번 더" },
+  chainbolt: { icon: "⚡", label: "사슬 번개", range: "원", dmg: "11 (튕길 때마다 -20%)", cast: 2.5, rar: 1.6, attrs: ["elec"], gim: "다른 적에게 3번까지 튕김" },
+  flamer:    { icon: "🔥", label: "화염 방사", range: "근", dmg: "1.6/0.1초", area: "100", cast: 2, rar: 1.6, attrs: ["fire"], aoe: true, gim: "1.5초간 앞쪽 부채꼴에 불길" },
+  frostspear:{ icon: "❄", label: "서리 창", range: "원", dmg: "14", cast: 2, rar: 1.6, attrs: ["ice"], speedy: true, gim: "모든 적을 꿰뚫음" },
+  bees:      { icon: "🐝", label: "벌떼", range: "원", dmg: "1.2 × 8마리", cast: 2.5, rar: 1.2, attrs: ["poison"], speedy: true, gim: "적을 쫓아가는 벌 8마리" },
+  cannon:    { icon: "💥", label: "반동 대포", range: "원", dmg: "26", cast: 3, rar: 1.6, speedy: true, gim: "커다란 포탄, 쏘면 내가 크게 뒤로 밀림(벽에 닿기 쉬움)" },
+  hammer:    { icon: "🔨", label: "지진 망치", range: "근", dmg: "30", area: "90", cast: 3, rar: 1.6, aoe: true, gim: "내 주변을 내리쳐 적을 0.8초 크게 느리게 함" }
+};
+const LEGACY = ["spin", "bomb", "shoot", "dash", "zone", "nova", "boomerang", "lightning", "poison", "missile", "fireball", "frostbolt", "freeze", "sonic", "watergun", "gust", "needle", "judgment", "hex"];
+for (const id of LEGACY) SKILL[id].legacy = true;   // 옛 무기: 적 전용
+const baseOf = id => (SKILL[id] && SKILL[id].variantOf) || id;
+const W_HALF = 0.55;
+function wSlash(s, me, foe, ab, dmg, range){   // 근거리 휘두르기 (기존 베기 궤적 재사용)
+  const a0 = foe ? Math.atan2(foe.y - me.y, foe.x - me.x) : Math.atan2(me.hy, me.hx);
+  if (foe){ me.hx = Math.cos(a0); me.hy = Math.sin(a0); me.dashT = T(0.3); me.dashMult = 2.6; }   // 근거리: 적에게 달려들며 휘두름
+  s.slashes.push({ owner: me.id, sk: ab.eff, a0, ang: a0 - SLASH_HALF, t: 0, dmg, hit: [], range: range * ((me.mod[ab.eff] || {}).area || 1) });
+}
+function wShot(me, ab, base, spd, life, homing, r, col, delay, extra, recoil){   // 투사체 예약 (delay틱 뒤 발사)
+  me.shotQ.push({ t: SHOT_AIM + (delay || 0), ab, base, spd: spd * ((me.mod[ab.eff] || {}).spd || 1), life, homing, r, col, mul: me.castMul || 1, extra, recoil });
+  me.aimT = Math.max(me.aimT, SHOT_AIM + (delay || 0));
+}
+const wArea = (me, ab) => (me.mod[ab.eff] || {}).area || 1;
+function wCircle(s, me, x, y, rad, dmg, sk, after){ for (const f of foesOf(s, me)) if (Math.hypot(f.x - x, f.y - y) < rad + f.R){ hurt(s, f, me, dmg, sk); if (after) after(f); } }
+Object.assign(EFF, {
+  stick: (s, me, foe, ab) => wSlash(s, me, foe, ab, pw(me, 5, ab), 55),
+  chargeshot: (s, me, foe, ab) => {
+    if (ab.chargeAt == null){ ab.chargeAt = s.tick; popS(s, me.x, me.y - me.R - 14, "🎯차지"); return; }
+    const t = Math.min(8, (s.tick - ab.chargeAt) / 60); ab.chargeAt = s.tick;
+    wShot(me, ab, 3 + 1.5 * t * t, 11, 160, 0, 5 + t, "#ffe08a"); popS(s, me.x, me.y - me.R - 14, `🎯${t.toFixed(1)}초`);
+  },
+  webline: (s, me, foe, ab) => {
+    if (ab.webAt){ const w = s.objs.filter(o => o.kind === "web" && o.owner === me.id); if (w.length >= 4) w[0].t = 0;
+      s.objs.push({ kind: "web", owner: me.id, sk: ab.eff, x1: ab.webAt.x, y1: ab.webAt.y, x2: me.x, y2: me.y, t: T(6), dmg: pw(me, 4, ab), cd: {} }); }
+    ab.webAt = { x: me.x, y: me.y };
+  },
+  gatling: (s, me, foe, ab) => { const n = Math.max(1, me.abs.filter(a => a.fired > 0 || a.applied).length); for (let i = 0; i < Math.min(n, 20); i++) wShot(me, ab, 3.5, 12, 120, 0, 4, "#ffd27a", i * 4); popS(s, me.x, me.y - me.R - 14, `🔫×${n}`); },
+  ricochet: (s, me, foe, ab) => wShot(me, ab, 9, 8, 320, 0, 7, "#c8f0ff", 0, { wallB: 4, bMul: 1.5 }),
+  detonator: (s, me, foe, ab) => {
+    const mine = s.objs.filter(o => o.kind === "rmine" && o.owner === me.id);
+    if (mine.length){ for (const m of mine){ const mul = Math.min(3, 1 + 0.15 * (s.tick - m.at) / 60); s.booms.push({ x: m.x, y: m.y, r: m.r, t: 0 }); wCircle(s, me, m.x, m.y, m.r, m.dmg * mul, ab.eff); m.t = 0; } s.shake = Math.min(9, s.shake + 4); popS(s, me.x, me.y - me.R - 14, "💣기폭!"); return; }
+    s.objs.push({ kind: "rmine", owner: me.id, sk: ab.eff, x: me.x, y: me.y, r: 70 * wArea(me, ab), dmg: pw(me, 34, ab), at: s.tick, t: 1e9 });
+  },
+  hook: (s, me, foe, ab) => { if (!foe) return; s.bolts.push({ x1: me.x, y1: me.y, x2: foe.x, y2: foe.y, t: 0, col: "#c8b080" });
+    const dx = me.x - foe.x, dy = me.y - foe.y, d = Math.hypot(dx, dy) || 1, pull = Math.max(0, d - me.R - foe.R - 6) * 0.8; foe.x += dx / d * pull; foe.y += dy / d * pull; clampPos(foe); hurt(s, foe, me, pw(me, 8, ab), ab.eff); },
+  parry: (s, me, foe, ab) => { me.parryT = T(2.5); me.parryPow = 1.5 * ((me.mod[ab.eff] || {}).pow || 1); popS(s, me.x, me.y - me.R - 14, "🛡반격"); },
+  combo: (s, me, foe, ab) => { const n = Math.min(5, ab.sameChain || 1); wSlash(s, me, foe, ab, pw(me, 9 * n, ab), 70); if (n > 1) popS(s, me.x, me.y - me.R - 14, `⚔×${n}`); },
+  orbs: (s, me, foe, ab) => { let o = s.objs.find(x => x.kind === "orbs" && x.owner === me.id); if (!o){ o = { kind: "orbs", owner: me.id, sk: ab.eff, n: 0, a: 0, dmg: 0, cd: {}, t: 1e9 }; s.objs.push(o); } o.n = Math.min(6, o.n + 1); o.dmg = pw(me, 6, ab); },
+  meteor: (s, me, foe, ab) => { if (!foe) return; s.objs.push({ kind: "meteor", owner: me.id, sk: ab.eff, x: foe.x, y: foe.y, r: 60 * wArea(me, ab), dmg: pw(me, 70, ab), t: T(1.2), max: T(1.2) }); },
+  gamble: (s, me, foe, ab) => { const n = 1 + Math.floor(s.rng() * 6); wShot(me, ab, 5 * n, 10, 140, 0, 4 + n, n === 6 ? "#ffe066" : "#ffffff"); popS(s, me.x, me.y - me.R - 14, `🎲${n}`); if (n === 6) me.nextBoost = 2; },
+  scythe: (s, me, foe, ab) => wSlash(s, me, foe, ab, pw(me, 16 * (1 + 2 * (1 - Math.max(0, me.hp) / me.maxHp)), ab), 85),
+  sniper: (s, me, foe, ab) => { if (!foe) return; const d = Math.hypot(foe.x - me.x, foe.y - me.y); s.bolts.push({ x1: me.x, y1: me.y, x2: foe.x, y2: foe.y, t: 0, col: "#ffffff" }); hurt(s, foe, me, pw(me, clamp(d / 30 * 4, 2, 70), ab), ab.eff); },
+  vortex: (s, me, foe, ab) => { const v = s.objs.filter(o => o.kind === "vortex" && o.owner === me.id); if (v.length >= 2) v[0].t = 0; s.objs.push({ kind: "vortex", owner: me.id, sk: ab.eff, x: me.x, y: me.y, r: 55 * wArea(me, ab), dmg: pw(me, 3, ab), t: T(4), cd: 0 }); },
+  echo: (s, me, foe, ab) => { const w = me.lastWeaponAb; if (!w || baseOf(w.eff) === "echo"){ popS(s, me.x, me.y - me.R - 14, "🪞…"); return; } const c = me.castMul || 1; me.castMul = c * 0.7; EFF[w.eff](s, me, foe, w); me.castMul = c; popS(s, me.x, me.y - me.R - 14, "🪞" + SK_LABEL(w.eff)); },
+  chainbolt: (s, me, foe, ab) => { if (!foe) return; let cur = foe, d = pw(me, 11, ab), x = me.x, y = me.y; const hit = [];
+    for (let k = 0; k < 4 && cur; k++){ s.bolts.push({ x1: x, y1: y, x2: cur.x, y2: cur.y, t: 0, col: "#fff36a" }); hurt(s, cur, me, d, ab.eff); hit.push(cur); x = cur.x; y = cur.y; d *= 0.8;
+      cur = nearestOf(foesOf(s, me).filter(f => !hit.includes(f) && Math.hypot(f.x - x, f.y - y) < 170), { x, y }); } },
+  flamer: (s, me, foe, ab) => { s.objs.push({ kind: "flame", owner: me.id, sk: ab.eff, t: T(1.5), r: 100 * wArea(me, ab), dmg: pw(me, 1.6, ab), ang: foe ? Math.atan2(foe.y - me.y, foe.x - me.x) : 0 }); },
+  frostspear: (s, me, foe, ab) => wShot(me, ab, 14, 11, 160, 0, 8, "#bfefff", 0, { pierceAll: true }),
+  bees: (s, me, foe, ab) => { for (let i = 0; i < 8; i++) wShot(me, ab, 1.2, 5.5, 220, 0.14, 4, "#ffd84a", i * 3); },
+  cannon: (s, me, foe, ab) => wShot(me, ab, 26, 7, 200, 0, 14, "#ff9a5a", 0, null, 4),
+  hammer: (s, me, foe, ab) => { const rad = 90 * wArea(me, ab); s.booms.push({ x: me.x, y: me.y, r: rad, t: 0, col: "#d8b070" }); s.shake = Math.min(9, s.shake + 3);
+    wCircle(s, me, me.x, me.y, rad, pw(me, 30, ab), ab.eff, f => { f.slowT = Math.max(f.slowT, T(0.8)); f.slowMult = Math.min(f.slowMult || 1, 0.15); }); }
+});
+function registerWeapons(){ for (const id in WEAPONS){ const w = WEAPONS[id];
+  SKILL[id] = { label: w.label, desc: w.gim, g: "공격", rar: w.rar, weapon: true, start: !!w.start, area: !!w.aoe, leech: w.leech || 0, attrs: w.attrs || ["normal"] };
+  ENTITY[id] = { exec: w.cast }; if (w.speedy) SPEEDY.push(id);
+} }
+// 속성 부여(대장간 화로): base@attr 변형 무기를 만들어 둠 (효과는 같고 속성만 다름)
+function variantId(base, attr){
+  const id = base + "@" + attr;
+  if (!SKILL[id]){ SKILL[id] = { ...SKILL[base], attrs: [attr], variantOf: base, rar: 0 }; EFF[id] = EFF[base]; ENTITY[id] = ENTITY[base]; if (SPEEDY.includes(base)) SPEEDY.push(id); }
+  return id;
+}
+function ensureVariants(r){ for (const x of r.deck || []) if (x.type === "cond" && typeof x.suf === "string" && x.suf.includes("@")){ const [b, a] = x.suf.split("@"); variantId(b, a); } }
+// 무기 오브젝트(거미줄·지뢰·구슬·운석·회오리·화염): 갱신과 그리기
+const OBJ_UP = {
+  web: (s, o) => { const own = s.balls[o.owner]; for (const f of foesOf(s, own)){ if (segDist(f.x, f.y, o.x1, o.y1, o.x2, o.y2) < f.R + 3){ f.slowT = Math.max(f.slowT, 12); f.slowMult = Math.min(f.slowMult || 1, 0.5); if (!(o.cd[f.id] > s.tick)){ o.cd[f.id] = s.tick + 30; hurt(s, f, own, o.dmg, o.sk); } } } },
+  rmine: () => {},
+  orbs: (s, o) => { const own = s.balls[o.owner]; if (own.dead){ o.t = 0; return; } o.a += 0.07; for (let i = 0; i < o.n; i++){ const a = o.a + i * 6.283 / o.n, x = own.x + Math.cos(a) * (own.R + 18), y = own.y + Math.sin(a) * (own.R + 18);
+      for (const f of foesOf(s, own)) if (Math.hypot(f.x - x, f.y - y) < f.R + 6 && !(o.cd[f.id + ":" + i] > s.tick)){ o.cd[f.id + ":" + i] = s.tick + 36; hurt(s, f, own, o.dmg, o.sk); } } },
+  meteor: (s, o) => { if (o.t === 1){ const own = s.balls[o.owner]; s.booms.push({ x: o.x, y: o.y, r: o.r, t: 0, col: "#ffb060" }); s.shake = Math.min(9, s.shake + 5); wCircle(s, own, o.x, o.y, o.r, o.dmg, o.sk); } },
+  vortex: (s, o) => { const own = s.balls[o.owner]; for (const f of foesOf(s, own)){ const dx = o.x - f.x, dy = o.y - f.y, d = Math.hypot(dx, dy); if (d < o.r * 2.2 && d > 2){ f.x += dx / d * 1.3; f.y += dy / d * 1.3; clampPos(f); } } if (++o.cd % 18 === 0) wCircle(s, own, o.x, o.y, o.r, o.dmg, o.sk); },
+  flame: (s, o) => { const own = s.balls[o.owner], foe = other(s, own); if (own.dead){ o.t = 0; return; } if (foe) o.ang += clamp(angDiff(Math.atan2(foe.y - own.y, foe.x - own.x), o.ang), -0.05, 0.05);
+    if (o.t % 6 === 0) for (const f of foesOf(s, own)){ const dx = f.x - own.x, dy = f.y - own.y, d = Math.hypot(dx, dy); if (d < o.r + f.R && Math.abs(angDiff(Math.atan2(dy, dx), o.ang)) < 0.55) hurt(s, f, own, o.dmg, o.sk); } }
+};
+function segDist(px, py, x1, y1, x2, y2){ const dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy || 1, t = clamp(((px - x1) * dx + (py - y1) * dy) / L, 0, 1); return Math.hypot(px - x1 - t * dx, py - y1 - t * dy); }
+function stepObjs(s){ if (!s.objs.length) return; for (const o of s.objs){ OBJ_UP[o.kind](s, o); o.t--; } s.objs = s.objs.filter(o => o.t > 0); }
+function drawObjs(c, st){
+  for (const o of st.objs || []){ const own = st.balls[o.owner], col = o.owner === 0 ? "255,224,102" : "255,128,128";
+    if (o.kind === "web"){ c.strokeStyle = `rgba(230,230,255,${Math.min(0.8, o.t / 60)})`; c.lineWidth = 3; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(o.x1, o.y1); c.lineTo(o.x2, o.y2); c.stroke(); c.setLineDash([]); }
+    else if (o.kind === "rmine"){ c.beginPath(); c.arc(o.x, o.y, 8, 0, 6.29); c.fillStyle = `rgb(${col})`; c.fill(); c.strokeStyle = `rgba(${col},.35)`; c.lineWidth = 1; c.beginPath(); c.arc(o.x, o.y, o.r, 0, 6.29); c.stroke(); }
+    else if (o.kind === "orbs" && !own.dead){ for (let i = 0; i < o.n; i++){ const a = o.a + i * 6.283 / o.n; c.beginPath(); c.arc(own.x + Math.cos(a) * (own.R + 18), own.y + Math.sin(a) * (own.R + 18), 6, 0, 6.29); c.fillStyle = "#c8a0ff"; c.fill(); } }
+    else if (o.kind === "meteor"){ const p = 1 - o.t / o.max; c.strokeStyle = "rgba(255,140,60,.8)"; c.lineWidth = 2; c.beginPath(); c.arc(o.x, o.y, o.r, 0, 6.29); c.stroke(); c.fillStyle = "rgba(255,140,60,.25)"; c.beginPath(); c.arc(o.x, o.y, o.r * p, 0, 6.29); c.fill(); }
+    else if (o.kind === "vortex"){ c.strokeStyle = "rgba(160,220,255,.6)"; c.lineWidth = 2; for (let k = 0; k < 3; k++){ c.beginPath(); c.arc(o.x, o.y, o.r * (0.4 + 0.3 * k), (st.tick / 6 + k) % 6.28, (st.tick / 6 + k) % 6.28 + 4); c.stroke(); } }
+    else if (o.kind === "flame" && !own.dead){ c.fillStyle = "rgba(255,120,40,.35)"; c.beginPath(); c.moveTo(own.x, own.y); c.arc(own.x, own.y, o.r, o.ang - 0.55, o.ang + 0.55); c.closePath(); c.fill(); }
+  }
+}
+function openWeaponBook(){
+  const r = runState, own = new Set((r ? r.deck : []).filter(x => x.type === "cond").map(x => baseOf(x.suf)));
+  openInfo("🗡 무기 도감", `<table class="wbook"><tr><th></th><th>무기</th><th>거리</th><th>피해</th><th>범위</th><th>시전</th><th>속성</th><th>기믹</th></tr>${Object.entries(WEAPONS).map(([id, w]) => `<tr class="${own.has(id) ? "own" : ""}"><td>${w.icon}</td><td><b>${w.label}</b></td><td>${w.range}</td><td>${w.dmg}</td><td>${w.area || "-"}</td><td>${w.cast}초</td><td>${w.attrs ? attrIcons(w.attrs) : "-"}</td><td>${w.gim}</td></tr>`).join("")}</table><div class="small">노란 줄 = 내 덱에 있는 무기 · 속성은 대장간 🔥 화로에서 부여</div>`);
+}
 
 // ================= 전투 엔진 (1초=60틱, 시드 난수로 결정론) =================
 // ================= 문장 덱 (데모 28) =================
 // 플레이어의 덱 = 완성 문장 목록. 검사기가 1번 문장부터 차례로 하나씩 SCAN_T초 동안 검사하고, 조건이 맞으면 그 문장을 실행한 뒤
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
-const VERSION = "34";   // 화면에 보이는 버전 (반영 확인용)
+const VERSION = "35";   // 화면에 보이는 버전 (반영 확인용)
 const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -793,6 +915,7 @@ const ENTITY = { spin: { exec: 2.5 }, shoot: { exec: 2 }, bomb: { exec: 2.5 }, d
   ritual: { exec: 1 }, quake: { exec: 1.5 }, charge: { exec: 1 }, selfhurt: { exec: 0.5 }, jump5: { exec: 0.3 }, pierce: { exec: 0.6 } };
 const entExec = sk => (ENTITY[sk] && ENTITY[sk].exec) || EXEC_T;
 const SPEEDY = ["shoot", "missile", "fireball", "frostbolt", "watergun", "needle", "boomerang", "dash"];   // 속도 법칙이 의미 있는 개체
+registerWeapons();   // 무기 풀 등록 (ENTITY·SPEEDY가 준비된 뒤)
 // 조건형 앞자리(조건). rar: 클수록 흔함 → 좋은 조건일수록 작게
 const COND2 = {};
 [ ["c_t10", "10초마다", "interval", 10, 3], ["c_t7", "7초마다", "interval", 7, 2.5], ["c_t5", "5초마다", "interval", 5, 1.4], ["c_t3", "3초마다", "interval", 3, 0.5],
@@ -865,7 +988,7 @@ function execSent(s, k, ab){   // 실행 = 시전 시작. 시전 시간이 끝�
   ab.ready = false; ab.last = s.tick; ab.used = true; scanAdvance(k);
 }
 function lawExec(s, k, ab){   // 법칙: 전투마다 검사기가 처음 지나갈 때 적용
-  if (k.mod[ab.eff]) LAWS[ab.law].apply(k.mod[ab.eff], 1 + 0.5 * (ab.lv || 0));
+  for (const key in k.mod) if (key === ab.eff || baseOf(key) === ab.eff) LAWS[ab.law].apply(k.mod[key], 1 + 0.5 * (ab.lv || 0));   // 속성 부여된 변형에도
   ab.applied = true; ab.fired++; k.scan.busy = T(LAW_EXEC); scanAdvance(k);
   if (k.id === 0) s.flash.push(ab.sent);
   popS(s, k.x, k.y - k.R - 14, "📜" + SK_LABEL(ab.eff));
@@ -909,7 +1032,7 @@ function makeBattle(playerCfg, enemyCfgs, seed){
   const balls = [newBall(0, W * 0.18, H * 0.5, rng() * 6.28, playerCfg)];
   enemyCfgs.forEach((c, i) => balls.push(newBall(i + 1, W * 0.72 + (i % 2) * 36, H * (n === 1 ? 0.5 : (i + 1) / (n + 1)), rng() * 6.28, c)));
   return { tick: 0, rng, depth: 0, winner: null, pairCd: {}, flash: [], pops: [], balls, hooks: {}, brewCount: 0, reviveUsed: false,
-    shotStat: { fired: 0, hit: 0 }, blood: [], slashes: [], mines: [], booms: [], shots: [], dashes: [], zones: [], boomers: [], bolts: [], shake: 0 };
+    shotStat: { fired: 0, hit: 0 }, blood: [], slashes: [], mines: [], booms: [], shots: [], dashes: [], zones: [], boomers: [], bolts: [], objs: [], shake: 0 };
 }
 
 function metricVal(s, me, m){
@@ -1030,8 +1153,10 @@ function hurt(s, tgt, src, amount, sk){
   let d = amount * mult * 12 / (12 + (tgt.curseT > 0 ? 0 : tgt.def));   // 저주: 방어력 0
   if (s.tick > OT_START) d *= 1 + (s.tick - OT_START) / OT_RAMP;   // 연장전
   d = clamp(d, 0.1, BIG);
+  if (tgt.parryT > 0){ d *= 0.5; if (src && src !== tgt && !src.dead && src.hp > 0){ src.hp -= d * (tgt.parryPow || 1.5); popS(s, src.x, src.y - src.R - 8, "🛡" + fmt(d * (tgt.parryPow || 1.5))); } }   // 반격 방패
   if (tgt.shieldT > 0 && tgt.shieldHp > 0){ const ab = Math.min(tgt.shieldHp, d); tgt.shieldHp -= ab; d -= ab; if (d <= 0) return; }
   tgt.hp -= d; if (tgt.markT > 0) tgt.markAcc += d;
+  if (sk && src && SKILL[sk] && SKILL[sk].leech && src.hp > 0) src.hp = Math.min(src.maxHp, src.hp + d * SKILL[sk].leech);   // 피의 낫 흡혈
   if (tgt.chargeT > 0 && (tgt.chargeDmg += d) >= tgt.chargeNeed){ tgt.chargeT = 0; popS(s, tgt.x, tgt.y - tgt.R - 14, "✋끊김!"); if (tgt.scan) tgt.scan.busy = Math.max(tgt.scan.busy, T(1.5)); }   // 낙인: 받은 피해 기록
   if (src && src.id === 0 && src.fx.lifesteal) src.hp = Math.min(src.maxHp, src.hp + d * src.fx.lifesteal);        // 유물: 흡혈
   if (tgt.id === 0 && tgt.fx.thorns && src && src.id !== 0 && !src.dead) src.hp -= tgt.fx.thorns;                   // 유물: 가시
@@ -1053,7 +1178,10 @@ function run(s, me, ab, idx){
   if (s.labelCasts && me.id !== 0 && ab.act === "cast" && s.pops.length < 30) s.pops.push({ x: me.x, y: me.y - me.R - 8, t: 0, txt: SK_LABEL(ab.eff) });   // 미리보기: 적이 쓰는 스킬 이름 표시
   if (ab.act === "cast"){
     const lc = (me.lastCast[ab.eff] || []).filter(t => s.tick - t < CHAIN_WINDOW); me.castMul = Math.pow(CHAIN_DECAY, Math.min(lc.length, 3)); lc.push(s.tick); me.lastCast[ab.eff] = lc;   // 최근 1초 안에 쓴 횟수만큼 ×0.7 (최대 3번까지)
+    const prevAb = me.lastRunAb; ab.sameChain = prevAb === ab ? (ab.sameChain || 1) + 1 : 1; me.lastRunAb = ab;   // 연속 베기: 같은 문장이 연달아 실행된 횟수
+    if (me.nextBoost && SKILL[ab.eff].weapon && baseOf(ab.eff) !== "gamble"){ me.castMul *= me.nextBoost; me.nextBoost = 0; popS(s, me.x, me.y - me.R - 22, "🎲×2!"); }
     EFF[ab.eff](s, me, other(s, me), ab);
+    if (SKILL[ab.eff].weapon && baseOf(ab.eff) !== "echo") me.lastWeaponAb = ab;
     if (me.fx.doubleCast && s.rng() < me.fx.doubleCast){   // 유물: 쌍둥이 종
       EFF[ab.eff](s, me, other(s, me), ab);
       if (me.id === 0 && s.pops.length < 30) s.pops.push({ x: me.x, y: me.y - me.R - 6, t: 0, txt: "×2" });
@@ -1092,7 +1220,7 @@ function step(s){
   if (s.hurtT > 0) s.hurtT--;
   if (s.sparks && s.sparks.length){ for (const p of s.sparks){ p.x += p.vx; p.y += p.vy; p.vx *= 0.86; p.vy *= 0.86; p.t--; } s.sparks = s.sparks.filter(p => p.t > 0); }
   if (s.rings && s.rings.length){ for (const g of s.rings) g.t++; s.rings = s.rings.filter(g => g.t < 12); }
-  for (const k of s.balls){ if (k.hitT > 0) k.hitT--; if (k.kx){ k.kx *= 0.7; k.ky *= 0.7; if (Math.abs(k.kx) + Math.abs(k.ky) < 0.2) k.kx = k.ky = 0; } }
+  for (const k of s.balls){ if (k.parryT > 0) k.parryT--; if (k.hitT > 0) k.hitT--; if (k.kx){ k.kx *= 0.7; k.ky *= 0.7; if (Math.abs(k.kx) + Math.abs(k.ky) < 0.2) k.kx = k.ky = 0; } }
   const P = s.balls[0], alive = s.balls.filter(b => !b.dead);
   if (s.tick === 1){
     for (const k of alive) fire(s, k, "start", {});   // 전투 시작할 때
@@ -1179,6 +1307,7 @@ function step(s){
     if (--z.t <= 0){ s.zones.splice(i, 1); continue; }
     if (s.tick % 30 === 0) for (const tg of foesOf(s, own)) if (Math.hypot(tg.x - z.x, tg.y - z.y) < z.r + tg.R) hurt(s, tg, own, z.dps / 2, z.sk);
   }
+  stepObjs(s);
   for (let i = s.shots.length - 1; i >= 0; i--){
     const sh = s.shots[i], own = s.balls[sh.owner], fl = foesOf(s, own), proj = SKILL[sh.sk].attrs.includes("proj");
     if (sh.homing > 0 && fl.length){
@@ -1188,7 +1317,8 @@ function step(s){
     sh.x += sh.vx; sh.y += sh.vy;
     if (--sh.life <= 0){ s.shots.splice(i, 1); continue; }
     if (sh.x < 0 || sh.x > W || sh.y < 0 || sh.y > H){   // 벽: 투사체 속성 규칙 — 20% 확률로 반사
-      if (proj && sh.bnc < 3 && rollRule(s, own, "reflect")){
+      if (sh.wallB > 0){ sh.wallB--; sh.dmg = Math.min(BIG, sh.dmg * (sh.bMul || 1)); if (sh.x < 0 || sh.x > W){ sh.vx = -sh.vx; sh.x = clamp(sh.x, 0, W); } if (sh.y < 0 || sh.y > H){ sh.vy = -sh.vy; sh.y = clamp(sh.y, 0, H); } sh.hit = []; popS(s, sh.x, sh.y, "×" + (sh.bMul || 1)); }
+      else if (proj && sh.bnc < 3 && rollRule(s, own, "reflect")){
         sh.bnc++; if (sh.x < 0 || sh.x > W){ sh.vx = -sh.vx; sh.x = clamp(sh.x, 0, W); } if (sh.y < 0 || sh.y > H){ sh.vy = -sh.vy; sh.y = clamp(sh.y, 0, H); }
         popS(s, sh.x, sh.y, "반사");
       } else { s.shots.splice(i, 1); continue; }
@@ -1197,7 +1327,8 @@ function step(s){
     const tg = fl.find(f => !sh.hit.includes(f.id) && Math.hypot(f.x - sh.x, f.y - sh.y) < f.R + (sh.r || 7));
     if (tg){
       hurt(s, tg, own, sh.dmg, sh.sk); s.shotStat.hit++;
-      if (proj && (sh.pierced || 0) < PIERCE_MAX && rollRule(s, own, "pierce")){ sh.hit.push(tg.id); sh.pierced = (sh.pierced || 0) + 1; popS(s, sh.x, sh.y, "관통"); }   // 적에 닿음: 20% 확률로 관통
+      if (sh.pierceAll) sh.hit.push(tg.id);
+      else if (proj && (sh.pierced || 0) < PIERCE_MAX && rollRule(s, own, "pierce")){ sh.hit.push(tg.id); sh.pierced = (sh.pierced || 0) + 1; popS(s, sh.x, sh.y, "관통"); }   // 적에 닿음: 20% 확률로 관통
       else s.shots.splice(i, 1);
     }
   }
@@ -1352,7 +1483,7 @@ const FORMATIONS = {
   swarm:  { label: "4마리", n: 4, hp: 0.3,  atk: 0.5, def: 0.5, from: 6, w: 1 }
 };
 let ENEMY_HP0 = 43, ENEMY_HP_GROW = 1.08, ENEMY_ATK0 = 6.8, ENEMY_ATK_GROW = 1.03;   // 적 곡선 (밸런스 조절용)
-const EARLY = { 1: 0.5, 2: 0.65, 3: 0.8 };   // 초반 층 적 체력 배율 (공격력은 제곱근)
+const EARLY = { 1: 0.3, 2: 0.45, 3: 0.6, 4: 0.75, 5: 0.9 };   // 초반 층 적 체력 배율 (공격력은 제곱근)
 const SPIKES = 0.5;   // 가시 갑옷: 돌진에 맞으면 그 피해의 30%를 돌진한 쪽에 되돌림
 const mkAb = (trig, tp, eff) => ({ kind: "cond", trig, tp, eff, act: "cast" });   // 적 문장도 조건형 문장 (순차 검사)
 function makeEnemy(f, typeId, form, kind, rng){
@@ -1415,11 +1546,11 @@ function newRun(seed){
   beginFloor(r, "normal");
   return r;
 }
-const START_DECK = [["cond", "c_t10", "spin"], ["cond", "c_start", "shield"], ["cond", "c_start", "heal5"], ["cond", "c_start", "heal5"], ["law", "spin", "l_pow10"]];   // 일부러 약한 시작 덱
+const START_DECK = [["cond", "c_t5", "stick"], ["cond", "c_start", "shield"], ["cond", "c_start", "heal5"], ["cond", "c_start", "heal5"], ["law", "stick", "l_pow10"]];   // 일부러 약한 시작 덱
 // ===== 저장 =====  전투 준비·지도 화면에 들어갈 때마다 자동 저장 (브라우저 저장소, 이 기기·이 브라우저에만)
 const SAVE_KEY = "ballTowerSave2";
 function saveGame(where){ try { if (!runState) return; localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 2, where, r: runState }, (k, v) => k === "rng" ? undefined : v)); } catch (e) {} }
-function loadGame(){ try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); if (!d || d.v !== 2 || !d.r) return null; const r = d.r; r.rng = rngOf(r); r.slots = r.decks[0].slots; return { r, where: d.where }; } catch (e) { return null; } }
+function loadGame(){ try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); if (!d || d.v !== 2 || !d.r) return null; const r = d.r; ensureVariants(r); r.rng = rngOf(r); r.slots = r.decks[0].slots; return { r, where: d.where }; } catch (e) { return null; } }
 function clearSave(){ try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 function beginFloor(r, kind){ r.encKind = kind; r.enc = genEncounter(r, kind); r.retry = 0; addTemps(r); }
 function addTemps(r){
@@ -1439,7 +1570,7 @@ const mkSlot = () => ({ w: null, v: null, c: null, t: null, a: null, lk: { w: fa
 function addSentenceSlot(r){ if (r.decks[0].slots.length >= MAX_SLOTS) return false; for (const d of r.decks) d.slots.push(mkSlot()); r.slots = r.decks[r.deck].slots; return true; }   // 보스 보상: 모든 덱에 문장 칸 +1
 function rollSentType(r){ if (r.lastLaw){ r.lastLaw = false; return "cond"; } const t = r.rng() < 0.5 ? "law" : "cond"; r.lastLaw = t === "law"; return t; }
 function pickDistinct(list, w, n, rng){ const out = [], pool = list.filter(x => w(x) > 0);   /* 가중치 0은 아예 안 나옴 */ while (out.length < n && pool.length){ const tot = pool.reduce((a, x) => a + w(x), 0); let x = rng() * tot, k = pool.length - 1; for (let i = 0; i < pool.length; i++){ x -= w(pool[i]); if (x <= 0){ k = i; break; } } out.push(pool.splice(k, 1)[0]); } return out; }
-const usedSkills = r => [...new Set(r.deck.filter(x => x.type === "cond").map(x => x.suf))];
+const usedSkills = r => [...new Set(r.deck.filter(x => x.type === "cond").map(x => baseOf(x.suf)))];
 // ===== 보상 조각 풀 =====
 // 상태이상·시너지 계열 조건: 2막부터, 그리고 지금 덱(조건형 문장의 스킬 속성)으로 그 상태이상·시너지가 가능할 때만 나옴
 const deckAttrSet = r => new Set(r.deck.filter(x => x.type === "cond").flatMap(x => SKILL[x.suf].attrs));
@@ -1457,12 +1588,12 @@ function condGate(r, id){
 const ACT1_WEAK = { c_t10: 0.15, c_start: 0.2, c_hp50: 0.15, c_kill: 0.15, c_combo: 0.15, c_potion: 0.05 };   // 1막엔 시작 문장보다 못한 조건은 거의 안 나옴 (나머지는 빈도 희귀도 그대로)
 const isAct1 = r => actOf(Math.min(r.floor, TOP_FLOOR)) === 1;
 const condW = (r, id) => COND2[id].temp || !condGate(r, id) ? 0 : COND2[id].rar * (isAct1(r) ? (ACT1_WEAK[id] != null ? ACT1_WEAK[id] : 1) : 1);
-const skillW = (r, sk) => SKILL[sk].enemy || SKILL[sk].start || SKILL[sk].temp ? 0 : isAct1(r) ? (SKILL[sk].g === "공격" ? 3 : ["shield", "heal", "atk"].includes(sk) ? 1 : 0.2) : SKILL[sk].rar;
+const skillW = (r, sk) => SKILL[sk].enemy || SKILL[sk].start || SKILL[sk].temp || SKILL[sk].legacy || SKILL[sk].variantOf ? 0 : isAct1(r) ? (SKILL[sk].g === "공격" ? 3 : ["shield", "heal", "atk"].includes(sk) ? 1 : 0.2) : SKILL[sk].rar;
 function prefixOpts(r, type){
   const n = relicFx(r).rewardN;
   if (type === "cond") return pickDistinct(Object.keys(COND2).filter(id => condW(r, id) > 0), id => condW(r, id), n, r.rng);
   const used = usedSkills(r);   // 버프는 덱에서 쓰는 스킬이 더 잘 나옴
-  return pickDistinct(Object.keys(SKILL), sk => SKILL[sk].rar * (used.includes(sk) ? 4 : 1), n, r.rng);
+  return pickDistinct(Object.keys(SKILL).filter(sk => !SKILL[sk].legacy && !SKILL[sk].variantOf), sk => SKILL[sk].rar * (used.includes(sk) ? 4 : 1), n, r.rng);
 }
 function suffixOpts(r, type, pre){
   if (type === "cond") return pickDistinct(Object.keys(SKILL), sk => skillW(r, sk), 3, r.rng);
@@ -2066,6 +2197,7 @@ function drawScene(c, st, preview){
   }
   for (const k of st.balls){
     if (k.dead){ if (k.revT > 0){ c.globalAlpha = 0.35; c.beginPath(); c.arc(k.x, k.y, k.R, 0, 6.29); c.fillStyle = k.color; c.fill(); c.globalAlpha = 1; c.fillStyle = "#ccd"; c.font = "bold 13px system-ui"; c.textAlign = "center"; c.fillText((k.revT / 60).toFixed(1), k.x, k.y + 5); } continue; }
+    if (k.parryT > 0){ c.beginPath(); c.arc(k.x, k.y, k.R + 7, 0, 6.29); c.strokeStyle = "#e8d8a0"; c.lineWidth = 3; c.setLineDash([6, 4]); c.stroke(); c.setLineDash([]); }
     if (k.cast){ const p = 1 - k.cast.t / k.cast.max; c.beginPath(); c.arc(k.x, k.y, k.R + 5, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = k.id === 0 ? "#ffe066" : "#ff8080"; c.lineWidth = 3; c.stroke();
       c.fillStyle = k.id === 0 ? "#fff3b0" : "#ffc0c0"; c.font = "bold 10px system-ui"; c.textAlign = "center"; c.fillText(SK_LABEL(k.cast.ab.eff), k.x, k.y - k.R - 8); }
     if (k.chargeT > 0){ const p = 1 - k.chargeT / k.chargeMax; c.beginPath(); c.arc(k.x, k.y, k.R + 8, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#c08aff"; c.lineWidth = 4; c.stroke();
@@ -2098,6 +2230,7 @@ function drawScene(c, st, preview){
     c.beginPath(); c.arc(own.x, own.y, sl.range, Math.max(a1, sl.ang - 0.5), sl.ang);
     c.strokeStyle = mine(sl.owner) ? "#ffe066" : "#ff8080"; c.lineWidth = 6; c.stroke(); c.globalAlpha = 1;
   }
+  drawObjs(c, st);
   for (const b of st.boomers){ c.save(); c.translate(b.x, b.y); c.rotate(st.tick * 0.5); c.fillStyle = mine(b.owner) ? "#ffd24a" : "#ff8080"; c.fillRect(-9, -3, 18, 6); c.fillRect(-3, -9, 6, 18); c.restore(); }
   for (const bt of st.bolts){ c.globalAlpha = 1 - bt.t / 10; c.strokeStyle = bt.col || "#fff36a"; c.lineWidth = 3; c.beginPath(); c.moveTo(bt.x1, bt.y1);
     const mx = (bt.x1 + bt.x2) / 2 + (bt.t % 3 - 1) * 10, my = (bt.y1 + bt.y2) / 2 + (bt.t % 2 - 0.5) * 14; c.lineTo(mx, my); c.lineTo(bt.x2, bt.y2); c.stroke(); c.globalAlpha = 1; }
@@ -2157,6 +2290,7 @@ function openInfo(title, html, bind){   // 버튼으로 여는 정보 창
 function closeInfo(){ const el = document.getElementById("info"); el.className = ""; el.innerHTML = ""; }
 function infoStats(){ const r = runState, fx = relicFx(r); return `<div class="card small">버전 ${VERSION}<br>🏢 ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 / ${TOP_FLOOR} · Lv${r.level} (경험치 ${r.xp}/${xpNeed(r.level)}) · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 검사 시간 ×${gapMulOf(r).toFixed(2)}<br>📜 문장 ${r.deck.length}개 · 한 바퀴 ${cycleOf(r).toFixed(1)}초 (문장당 ${(SCAN_BASE * gapMulOf(r)).toFixed(2)}초${relicFx(r).lawScan < 1 ? `, 버프 ${(SCAN_BASE * gapMulOf(r) * relicFx(r).lawScan).toFixed(2)}초` : ""})</div>`; }
 document.getElementById("bDeck").onclick = openDeck;
+document.getElementById("bBook").onclick = openWeaponBook;
 document.getElementById("bInfo").onclick = () => runState && openInfo("📊 정보", infoStats() + (runState.enc ? deckGlanceHtml(runState) + deckAttrHtml(runState) : ""));
 document.getElementById("bRelic").onclick = () => runState && openInfo("🏺 유물", relicHtml(runState));
 document.getElementById("bPot").onclick = () => runState && openInfo("🧪 물약", potionHtml(runState), el => el.querySelectorAll("button[data-dp]").forEach(b => b.onclick = () => { runState.potions.splice(Number(b.dataset.dp), 1); document.getElementById("bPot").onclick(); }));
@@ -2658,6 +2792,7 @@ function renderPickSent(title, onPick, onBack, filter){
 }
 function upSent(r, i){ const x = r.deck[i]; if (!x || (x.lv || 0) >= SENT_MAX_LV) return "이미 최대 단계예요"; const c = sentUpCost(x.lv || 0); if (r.gold < c) return "골드가 부족해요"; r.gold -= c; x.lv = (x.lv || 0) + 1; return null; }
 const sentUpText = x => x.type === "law" ? "버프 효과 +50%" : x.type === "rule" ? "규칙 효과 +50%" : "그 문장의 위력 +30%";
+const IMBUE_COST = 80;   // 속성 부여 비용
 function renderForge(wasHidden, note, view){   // 대장간: 모루·숫돌·화로 중 하나를 골라 들어감 (각 화면에 뒤로)
   phase = "forge"; const r = runState; updateHud();
   const head = `<div class="counter forgec"><b>🔨 대장간</b><span>💰 ${r.gold}</span>${note ? `<span class="cnote">${note}</span>` : ""}</div>`;
@@ -2666,15 +2801,23 @@ function renderForge(wasHidden, note, view){   // 대장간: 모루·숫돌·화
     panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔨 모루 — 강화할 문장</div><div class="tiles">${r.deck.map((x, i) => { const lv = x.lv || 0, max = lv >= SENT_MAX_LV || (x.type === "rule" && RULES[x.pre].noUp);
       return `<button class="tile forge sblk ${sentCls(x)}" data-su="${i}" ${max ? "disabled" : ""}><div class="nm">${i + 1}. ${sentText(x)}</div><div class="sb">${max ? "최대" : `★${lv + 1}: ${sentUpText(x)}`}</div><div class="pr">${max ? "" : "💰 " + sentUpCost(lv)}</div></button>`; }).join("")}</div></div>` + back;
     panel.querySelectorAll(".tile[data-su]").forEach(b => b.onclick = () => { const e = upSent(r, Number(b.dataset.su)); renderForge(wasHidden, e || "강화!", "up"); });
+  } else if (view && view.startsWith("imbue:")){   // 속성 부여: 무기 하나 → 속성 고르기
+    const i = +view.slice(6), x = r.deck[i], base = baseOf(x.suf);
+    panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔥 화로 — ${SK_LABEL(base)}에 부여할 속성 (💰${IMBUE_COST})</div><div class="tiles">${ATTR_LIST.map(a => `<button class="tile forge" data-ia="${a}"><div class="ic">${ATTR[a].icon}</div><div class="nm">${ATTR[a].name}</div></button>`).join("")}</div></div>` + back;
+    panel.querySelectorAll(".tile[data-ia]").forEach(b => b.onclick = () => { if (r.gold < IMBUE_COST) return renderForge(wasHidden, "골드가 부족해요", "attr"); r.gold -= IMBUE_COST; x.suf = variantId(base, b.dataset.ia); renderForge(wasHidden, `${SK_FULL(x.suf)} 완성!`, "attr"); });
+    document.getElementById("fback").onclick = () => renderForge(wasHidden, "", "attr"); return;
   } else if (view === "attr"){
-    panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔥 화로 — 속성 단련 (내 스킬의 속성만)</div>${my.length ? `<div class="tiles">${my.map(a => { const lv = r.attrUp[a] || 0, max = lv >= ATTR_UP_MAX;
+    const wpn = r.deck.map((x, i) => [x, i]).filter(([x]) => x.type === "cond" && SKILL[x.suf] && SKILL[x.suf].weapon && !x.temp);
+    panel.innerHTML = head + `<div class="shelf"><div class="shelfh">🔥 화로 — 속성 부여 (무기에 속성을 입힘, 💰${IMBUE_COST})</div>${wpn.length ? `<div class="tiles">${wpn.map(([x, i]) => `<button class="tile forge sblk cond" data-im="${i}"><div class="nm">${i + 1}. ${sentText(x)}</div></button>`).join("")}</div>` : `<div class="small">무기 문장이 없어요</div>`}</div>` +
+      `<div class="shelf"><div class="shelfh">🔥 화로 — 속성 단련 (내 스킬의 속성만)</div>${my.length ? `<div class="tiles">${my.map(a => { const lv = r.attrUp[a] || 0, max = lv >= ATTR_UP_MAX;
       return `<button class="tile forge" data-au="${a}" ${max ? "disabled" : ""}><div class="ic">${ATTR[a].icon}</div><div class="nm">${ATTR[a].name} ${lv}단계</div><div class="sb">${max ? "최대" : ATTR_UP_TEXT[a](lv + 1)}</div><div class="pr">${max ? "" : "💰 " + attrUpCost(lv)}</div></button>`; }).join("")}</div>` : `<div class="small">단련할 속성이 없어요</div>`}</div>` + back;
     panel.querySelectorAll(".tile[data-au]").forEach(b => b.onclick = () => { const e = forgeAttrUp(r, b.dataset.au); renderForge(wasHidden, e || `${ATTR[b.dataset.au].name} 단련!`, "attr"); });
+    panel.querySelectorAll(".tile[data-im]").forEach(b => b.onclick = () => renderForge(wasHidden, "", "imbue:" + b.dataset.im));
   } else {
     panel.innerHTML = head + `<div class="tiles big">
       <button class="tile forge" id="fUp"><div class="ic">⚒️</div><div class="nm">모루</div><div class="sb">문장 강화 (★${SENT_MAX_LV}까지)</div></button>
       <button class="tile forge" id="fRm"><div class="ic">✂️</div><div class="nm">숫돌</div><div class="sb">문장 지우기</div><div class="pr">💰 ${removeCost(r)}</div></button>
-      <button class="tile forge" id="fAt" ${my.length ? "" : "disabled"}><div class="ic">🔥</div><div class="nm">화로</div><div class="sb">속성 단련 ${my.map(a => ATTR[a].icon).join("")}</div></button></div>
+      <button class="tile forge" id="fAt"><div class="ic">🔥</div><div class="nm">화로</div><div class="sb">속성 부여 · 단련 ${my.map(a => ATTR[a].icon).join("")}</div></button></div>
       <button class="main" id="lv">나가기</button>`;
     document.getElementById("fUp").onclick = () => renderForge(wasHidden, "", "up");
     document.getElementById("fAt").onclick = () => renderForge(wasHidden, "", "attr");
