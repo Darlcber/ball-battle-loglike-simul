@@ -900,6 +900,7 @@ function openWeaponBook(){
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
 const VERSION = "35";   // 화면에 보이는 버전 (반영 확인용)
+const FOCUS_SLOW = 0.2;   // (v2) 정신집중 중 이동 속도 배율 (완전히 멈추지 않고 아주 느리게)
 const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -1261,7 +1262,7 @@ function step(s){
     if (s.tick % 30 === 0){ for (const dt of k.dots) hurt(s, k, null, dt.dps / 2); }
     for (const dt of k.dots) dt.t--;
     k.dots = k.dots.filter(dt => dt.t > 0);
-    const sp = frozen || k.aimT > 0 || k.focus ? 0 : k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
+    const sp = frozen || k.aimT > 0 ? 0 : (k.focus ? FOCUS_SLOW : 1) * k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
     k.x += k.hx * sp; k.y += k.hy * sp;
     let wall = false;
     if (k.x < k.R){ k.x = k.R; k.hx = Math.abs(k.hx); wall = true; }

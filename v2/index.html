@@ -900,6 +900,7 @@ function openWeaponBook(){
 // 실행 시간(EXEC) 동안 검사가 멈췄다가 다음 문장으로 넘어감. 법칙형은 실행되진 않지만 검사 시간은 차지함 → 문장이 많을수록 좋은 문장이 덜 자주 돌아옴.
 // 사건 조건(닿을 때 등)은 그 문장을 검사하는 동안에 사건이 일어나야 발동.
 const VERSION = "35";   // 화면에 보이는 버전 (반영 확인용)
+const FOCUS_SLOW = 0.2;   // (v2) 정신집중 중 이동 속도 배율 (완전히 멈추지 않고 아주 느리게)
 const SCAN_T = 1.0, EXEC_T = 2.5, LAW_EXEC = 0.5;   // EXEC_T: 기본 시전 시간, LAW_EXEC: 법칙 첫 실행 시간
 let ENEMY_SCAN = 0.5;   // 적 문장 검사 속도 배율 (1 = 1초씩, 0.5 = 0.5초씩)
 // 개체(스킬)별 속성값 — 나중에 조정하기 쉽게 표로 둠. exec = 실행 시간(초), 없으면 EXEC_T
@@ -1261,7 +1262,7 @@ function step(s){
     if (s.tick % 30 === 0){ for (const dt of k.dots) hurt(s, k, null, dt.dps / 2); }
     for (const dt of k.dots) dt.t--;
     k.dots = k.dots.filter(dt => dt.t > 0);
-    const sp = frozen || k.aimT > 0 || k.focus ? 0 : k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
+    const sp = frozen || k.aimT > 0 ? 0 : (k.focus ? FOCUS_SLOW : 1) * k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
     k.x += k.hx * sp; k.y += k.hy * sp;
     let wall = false;
     if (k.x < k.R){ k.x = k.R; k.hx = Math.abs(k.hx); wall = true; }
@@ -3022,7 +3023,15 @@ const CARDS = {
   bees:    { name: "벌떼", icon: "🐝", type: "atk", cast: 3, focus: 2, rar: 3, desc: "쫓아가는 벌 8마리 (독)", fire: (s, me, foe) => EFF.bees(s, me, foe, wab("bees", 1.4)) },
   gatling: { name: "속사포", icon: "🔫", type: "atk", cast: 2.5, focus: 1.5, rar: 3, desc: "이번 전투에서 낸 카드 수만큼 연발 (3.5씩)", fire: (s, me, foe) => { const n = Math.min(20, s.v2.played); for (let i = 0; i < n; i++) wShot(me, wab("gatling"), 3.5, 12, 120, 0, 4, "#ffd27a", i * 4); popS(s, me.x, me.y - me.R - 14, `🔫×${n}`); } },
   echo:    { name: "메아리", icon: "🪞", type: "atk", cast: 1.5, focus: 1, rar: 3, desc: "직전 공격 카드를 위력 70%로 한 번 더", fire: (s, me, foe) => { const c = s.v2.lastAtk; if (!c) return; const m = me.castMul || 1; me.castMul = m * 0.7; CD(c).fire(s, me, foe, 1); me.castMul = m; popS(s, me.x, me.y - me.R - 14, "🪞" + CD(c).name); } },
+  // 저코스트: 약한 대신 시전·정신집중이 짧음
+  jab:     { name: "잽", icon: "👊", type: "atk", cast: 0.8, focus: 0.3, rar: 1, desc: "가볍게 달려들어 침 (피해 4)", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 4, wab("stick")), 60) },
+  stab:    { name: "찌르기", icon: "🔪", type: "atk", cast: 1, focus: 0.2, rar: 1, desc: "재빨리 찌름 (피해 5)", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 5, wab("stick")), 65) },
+  sling:   { name: "돌팔매", icon: "🪨", type: "atk", cast: 1, focus: 0.5, rar: 1, desc: "작은 돌을 던짐 (피해 5)", fire: (s, me, foe) => wShot(me, wab("stick"), 5, 11, 140, 0, 5, "#c8b8a0") },
+  ember:   { name: "불씨", icon: "✨", type: "atk", cast: 1.2, focus: 0.6, rar: 2, desc: "작은 불덩이 (피해 4, 불)", fire: (s, me, foe) => wShot(me, wab("flamer"), 4 / 1.6 * 1.6, 10, 140, 0, 5, "#ff9a3c") },
   // ---- 스킬 ----
+  sidestep:{ name: "옆걸음", icon: "👣", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "옆으로 살짝 비켜섬", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(foe.y - me.y, foe.x - me.x) + (s.rng() < 0.5 ? 1.57 : -1.57); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.25); me.dashMult = 2.5; } },
+  brace:   { name: "웅크리기", icon: "🐢", type: "skill", cast: 1, focus: 0, rar: 1, desc: "시전 동안 받는 피해 -50%", fire: (s, me, foe, dur) => { me.guardT = T(dur); } },
+  breath:  { name: "숨 고르기", icon: "😮‍💨", type: "skill", cast: 0.8, focus: 0.5, rar: 1, desc: "체력 3% 회복", fire: (s, me, foe, dur, m = 1) => { const h = me.maxHp * 0.03 * m; me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "+" + fmt(h)); } },
   guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "시전 동안 받는 피해 -50% + 보호막 5", fire: (s, me, foe, dur, m = 1) => { me.guardT = T(dur); me.shieldHp = Math.min(BIG, me.shieldHp + 5 * m); me.shieldT = Math.max(me.shieldT, T(dur)); } },
   ghost:   { name: "유령화", icon: "👻", type: "skill", cast: 1.5, focus: 0, rar: 3, desc: "시전 동안 모든 공격을 피함", fire: (s, me, foe, dur) => { me.invulnT = Math.max(me.invulnT, T(dur)); } },
   buffer:  { name: "완충", icon: "🔰", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 직접 공격 1번을 완전히 막음", fire: (s, me, foe, dur, m = 1) => { me.blockN = (me.blockN || 0) + (m > 1 ? 2 : 1); } },
@@ -3031,6 +3040,7 @@ const CARDS = {
   parry:   { name: "반격", icon: "🤺", type: "skill", cast: 2, focus: 0, rar: 2, desc: "시전 동안 받는 피해 -50%, 때린 적에게 150% 되돌림", fire: (s, me, foe, dur, m = 1) => { me.parryT = T(dur); me.parryPow = 1.5 * m; } },
   wall:    { name: "방벽", icon: "🧱", type: "skill", cast: 2.5, focus: 1.5, rar: 1, desc: "보호막 18 (5초)", fire: (s, me, foe, dur, m = 1) => { me.shieldHp = Math.min(BIG, me.shieldHp + 18 * m); me.shieldT = Math.max(me.shieldT, T(5)); } },
   // ---- 파워 (이번 전투 내내, 한 번 쓰면 이번 전투에서 사라짐) ----
+  spark:   { name: "투지", icon: "🔥", type: "power", cast: 1.5, focus: 1, rar: 2, desc: "이번 전투 공격력 +8% (저코스트)", fire: (s, me, foe, dur, m = 1) => { me.atkBonus += 0.08 * m; } },
   might:   { name: "근력", icon: "💪", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 공격력 +25%", fire: (s, me, foe, dur, m = 1) => { me.atkBonus += 0.25 * m; } },
   iron:    { name: "철갑", icon: "🪨", type: "power", cast: 4, focus: 3.5, rar: 2, desc: "이번 전투 받는 피해 -25%", fire: (s, me, foe, dur, m = 1) => { me.dmgMul = (me.dmgMul || 1) * Math.pow(0.75, m); } },
   calm:    { name: "평정", icon: "🧘", type: "power", cast: 3.5, focus: 3, rar: 3, desc: "다음 라운드부터 정신집중 시간 -30%", fire: (s, me, foe, dur, m = 1) => { s.v2.focusMul *= Math.pow(0.7, m); } },
@@ -3194,7 +3204,7 @@ function renderPlan(){
     <div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}</div></div>${enemyRows}${myRow}</div>
     <div class="handrow"><div class="pile" title="뽑을 카드">🂠<small>${V.draw.length}</small></div>${hand}<div class="pile disc" title="버린 카드">🗑<small>${V.disc.length}</small></div></div>
     <div class="small pinfo" id="pinfo">${planInfo || "패를 누른 순서대로 타임라인에 올라가요 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 끌면 자리 이동 · 적 아이콘·행동을 누르면 적 정보"}</div>
-    <div class="row" style="gap:6px"><button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : `패를 모두 올려 주세요 ${V.placed.length}/${V.hand.length}`}</button></div></div>`;
+    <div class="row" style="gap:6px">${potRowHtml()}<button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : `패를 모두 올려 주세요 ${V.placed.length}/${V.hand.length}`}</button></div></div>`;
   V.anim = false;
   const showInfo = id => { const C = CD(id); planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
   // 누르기/꾹 누르기/끌기 판별
@@ -3223,8 +3233,35 @@ function renderPlan(){
         const at = to < tl.length ? tl[to].start : sumP; drop.style.display = "block"; drop.style.left = pct(at); },
       end: () => { const P = V.placed, [x] = P.splice(k, 1); P.splice(to > k ? to - 1 : to, 0, x); renderPlan(); } }); });
   document.getElementById("pgo").onclick = () => { if (!all) return; V.hand = V.placed.map(i => V.hand[i]); V.placed = []; v2Execute(s); s.planning = false; panel.classList.remove("plan"); phase = "battle"; last = performance.now(); acc = 0; renderSidesV2(); };
+  panel.querySelector(".pile:not(.disc)").onclick = () => showPile("draw");
+  panel.querySelector(".pile.disc").onclick = () => showPile("disc");
+  bindPotRow(panel);
   renderSidesV2();
 }
+// 1. 남은 덱 보기: 뽑을 더미·버린 더미 (순서는 숨기고 종류별로)
+function pileHtml(list){ const cnt = {}; for (const k of list) cnt[k] = (cnt[k] || 0) + 1;
+  const keys = Object.keys(cnt).sort((a, b) => ["atk", "skill", "power"].indexOf(CD(a).type) - ["atk", "skill", "power"].indexOf(CD(b).type) || CD(a).name.localeCompare(CD(b).name));
+  return keys.length ? `<div class="crow wrap">${keys.map(k => cardTileK(k, "disabled", "").replace("</button>", `<div class="ccnt">×${cnt[k]}</div></button>`)).join("")}</div>` : `<div class="small">비어 있어요</div>`; }
+function showPile(which){ const V = state.v2, list = which === "draw" ? V.draw : V.disc;
+  openInfo(which === "draw" ? `🂠 뽑을 카드 ${list.length}장 (순서는 비밀)` : `🗑 버린 카드 ${list.length}장`, pileHtml(list)); }
+// 4. 물약: 누르면 효과 설명 → [사용]
+function potRowHtml(){ const r = runState; return r.potions.length ? `<div class="prow">${r.potions.map((id, i) => `<button class="potbtn t-${POTION[id].tier}" data-pi="${i}">${POTION[id].icon}</button>`).join("")}</div>` : ""; }
+function bindPotRow(root){ root.querySelectorAll("[data-pi]").forEach(b => b.onclick = () => askPotion(+b.dataset.pi)); }
+function askPotion(i){
+  const r = runState, id = r.potions[i]; if (!id || !state) return; const d = POTION[id], wasPaused = paused;
+  if (phase === "battle") paused = true;
+  openInfo(`${d.icon} ${d.name}`, `<div class="card">${tierTag(d.tier)} ${d.desc}</div><div class="row" style="gap:8px;margin-top:8px"><button class="main" id="potUse" style="flex:1">사용</button><button class="mini" id="potNo" style="flex:none;padding:8px 14px">닫기</button></div>`, el => {
+    const close = () => { closeInfo(); paused = wasPaused; };
+    el.querySelector("#potUse").onclick = () => { if (state.winner === null){ const u = usePotion(state, r, i); if (u && state.pops.length < 30) state.pops.push({ x: state.balls[0].x, y: state.balls[0].y - 34, t: 0, txt: POTION[u].icon + POTION[u].name }); } close(); renderPotions(); if (phase === "plan") renderPlan(); };
+    el.querySelector("#potNo").onclick = close; document.getElementById("infoX").onclick = close; el.onclick = e => { if (e.target === el) close(); }; });
+}
+renderPotions = function(){
+  const r = runState;
+  if (phase !== "battle" && phase !== "plan"){ potionsEl.innerHTML = ""; potionsEl.style.display = "none"; return; }
+  potionsEl.style.display = r.potions.length ? "flex" : "none";
+  potionsEl.innerHTML = r.potions.map((id, i) => `<button class="potbtn t-${POTION[id].tier}" data-pi="${i}">${POTION[id].icon} ${POTION[id].name}</button>`).join("");
+  bindPotRow(potionsEl);
+};
 function renderSidesV2(){
   const s = state; if (!s) return;
   const tl = s.rd && !s.rd.over ? s.rd.plan : v2Placed(s);
@@ -3272,7 +3309,7 @@ renderOver = (function(f){ return function(cleared, lines){ const r = runState; 
 openDeck = function(){
   const r = runState; if (!r) return; const cnt = {}; for (const c of r.cards) cnt[c.id] = (cnt[c.id] || 0) + 1;
   const s = state && state.v2 ? state.v2 : null;
-  openInfo(`🃏 내 덱 · ${r.cards.length}장`, `${s ? `<div class="small">뽑을 카드 ${s.draw.length} · 버린 카드 ${s.disc.length} · 손 ${s.hand.length}</div>` : ""}<div class="crow wrap">${Object.keys(cnt).map(id => cardTile(id, "disabled").replace('</button>', `<div class="ccnt">×${cnt[id]}</div></button>`)).join("")}</div>`);
+  openInfo(`🃏 내 덱 · ${r.cards.length}장`, `${s ? `<div class="shelfh">🂠 뽑을 카드 ${s.draw.length}장</div>${pileHtml(s.draw)}<div class="shelfh">🗑 버린 카드 ${s.disc.length}장</div>${pileHtml(s.disc)}<div class="shelfh">전체 덱</div>` : ""}<div class="crow wrap">${Object.keys(cnt).map(id => cardTile(id, "disabled").replace('</button>', `<div class="ccnt">×${cnt[id]}</div></button>`)).join("")}</div>`);
 };
 document.getElementById("bDeck").onclick = openDeck;
 document.getElementById("bBook").style.display = "none";
@@ -3412,6 +3449,7 @@ chooseRoute = function(i){ const r = runState, o = r.routes[i];
   if (o.type === "event"){ r.routes = null; renderCardReward(["🎁 길에서 카드를 발견했어요"], () => finishRest("카드를 챙겼어요")); return; }
   chooseRoute0(i); };
 { const st = document.createElement("style"); st.textContent = `
+  .pile{cursor:pointer}.prow{display:flex;gap:4px}.prow .potbtn{padding:6px 8px;font-size:16px}
   .ccard.up .cnm{color:#9cff9c}.ccard .cup{font-size:11px;color:#9cff9c;margin-top:2px}.ccard .cpr{font-size:13px;font-weight:bold;color:#ffe066;margin-top:auto}
   .ccard:disabled{opacity:.4}.hcard .hnm{white-space:nowrap}`; document.head.appendChild(st); }
 
