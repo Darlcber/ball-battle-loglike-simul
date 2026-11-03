@@ -3051,11 +3051,15 @@ const CARDS = {
 const START_CARDS = ["club", "club", "club", "club", "guard", "guard", "guard", "guard"];   // 약한 시작 덱
 // ===== 카드 강화 (데모 v2.1): 키 끝에 "+" = 강화 카드. 정신집중 -0.5초(시전도 그만큼 짧아짐), 효과 ×1.35 =====
 const UP_MUL = 1.35, CD_CACHE = {};
+const upN = n => +(n * UP_MUL).toFixed(1);
+function upDesc(d){   // 설명 속 효과 수치만 ×1.35 (피해·보호막·회복·공격력·되돌림 등). 범위·시간·마릿수는 그대로
+  return d.replace(/(피해 |보호막 |공격력 \+|체력 |닿으면 |\(|매초 체력 )(\d+(?:\.\d+)?)(%| 회복| 빼앗음| ×|씩|\)|,| |$)/g, (m, a, n, b) => a + upN(+n) + b).replace(/(\d+)% 되돌림/, (m, n) => upN(+n) + "% 되돌림");
+}
 function CD(k){
   if (!k.endsWith("+")) return CARDS[k];
   if (CD_CACHE[k]) return CD_CACHE[k];
   const b = CARDS[k.slice(0, -1)], cut = Math.min(0.5, b.focus);
-  return CD_CACHE[k] = { ...b, name: b.name + "+", up: true, cast: +(b.cast - cut).toFixed(2), focus: +(b.focus - cut).toFixed(2),
+  return CD_CACHE[k] = { ...b, name: b.name + "+", up: true, desc: upDesc(b.desc), cast: +(b.cast - cut).toFixed(2), focus: +(b.focus - cut).toFixed(2),
     fire: (s, me, foe, dur) => { const m0 = me.castMul || 1; me.castMul = m0 * UP_MUL; b.fire(s, me, foe, dur, UP_MUL); me.castMul = m0; } };
 }
 const upText = k => { const b = CARDS[k], cut = Math.min(0.5, b.focus); return `${cut ? `시전·집중 -${cut}초, ` : ""}효과 ×${UP_MUL}`; };
@@ -3157,11 +3161,22 @@ loop = function(now){ loop0(now); if (state && state.v2 && state.rd && state.rd.
 // 공·적 위 표시: 정신집중 고리, 적 예고
 const draw0 = draw;
 draw = function(){ draw0(); if (state && state.v2 && (phase === "battle" || phase === "plan")) drawV2(ctx, state); };
+// 전투 진행 중 아래쪽 직선 타임라인: 위 눈금 = 내 카드 경계, 아래 점 = 적 행동(색), 점선 = 더미 타임, ▲ = 지금
+function drawRunLine(c, rd, rt){
+  const x0 = 14, x1 = W - 14, y = H - 12, X = t => x0 + (x1 - x0) * Math.min(1, t / rd.T);
+  c.save(); c.lineWidth = 1.5; c.strokeStyle = "rgba(255,255,255,.75)"; c.beginPath(); c.moveTo(x0, y); c.lineTo(X(rd.L), y); c.stroke();
+  if (rd.T > rd.L){ c.setLineDash([3, 3]); c.strokeStyle = "rgba(255,255,255,.4)"; c.beginPath(); c.moveTo(X(rd.L), y); c.lineTo(x1, y); c.stroke(); c.setLineDash([]); }
+  for (const p of rd.plan){ const C = CD(p.id); c.strokeStyle = CARD_TYPE[C.type].col; c.lineWidth = 2; c.beginPath(); c.moveTo(X(p.start), y - 6); c.lineTo(X(p.start), y); c.stroke(); }
+  const ec = { atk: "#ff5050", skill: "#4aa8ff", power: "#b070ff" };
+  for (const E of rd.en) for (const v of E.evs){ c.fillStyle = v.fizzled ? "#666" : ec[actType(v.sk)]; c.beginPath(); c.arc(X(v.t), y + 4, 2.5, 0, 6.29); c.fill(); }
+  const ax = X(rt); c.fillStyle = "#ffe066"; c.beginPath(); c.moveTo(ax, y - 2); c.lineTo(ax - 5, y - 10); c.lineTo(ax + 5, y - 10); c.closePath(); c.fill();
+  if (rt > rd.L){ c.fillStyle = "#99a"; c.font = "10px system-ui"; c.textAlign = "center"; c.fillText("더미 타임", W / 2, y - 12); }
+  c.restore();
+}
 function drawV2(c, s){
   const P = s.balls[0], rd = s.rd;
   if (rd && !rd.over){ const rt = (s.tick - rd.t0) / 60;
-    c.fillStyle = "rgba(255,255,255,.12)"; c.fillRect(0, H - 6, W, 6); c.fillStyle = "#ffe066"; c.fillRect(0, H - 6, W * Math.min(1, rt / rd.T), 6);
-    if (rt > rd.L){ c.fillStyle = "#99a"; c.font = "11px system-ui"; c.textAlign = "center"; c.fillText("더미 타임", W / 2, H - 10); }
+    drawRunLine(c, rd, rt);
     const cur = rd.cur;
     if (cur && !P.dead){ const C = CD(cur.id);
       if (P.focus){ const p = (rt - cur.start) / Math.max(0.01, cur.fEnd - cur.start); c.beginPath(); c.arc(P.x, P.y, P.R + 6, -Math.PI / 2, -Math.PI / 2 + p * 6.283); c.strokeStyle = "#7fd8ff"; c.lineWidth = 4; c.stroke(); }
@@ -3393,6 +3408,13 @@ function renderCardPick(title, filter, onPick, onBack, extraOf){
   document.getElementById("pkback").onclick = onBack;
 }
 const canUp = c => !c.id.endsWith("+");
+function confirmUpgrade(i, onYes, onNo){   // 기존 카드 → 강화 카드를 나란히 보여 주고 확인
+  const r = runState, k = r.cards[i].id;
+  panel.innerHTML = `<div class="counter forgec"><b>⚒️ 강화할까요?</b></div><div class="crow" style="align-items:center">${cardTileK(k, "disabled")}<div style="font-size:30px;color:#9cff9c">➜</div>${cardTileK(k + "+", "disabled")}</div>
+    <div class="small" style="text-align:center;color:#9cff9c">${upText(k)}</div><div class="row" style="gap:8px"><button class="main" id="upYes" style="flex:2">강화</button><button class="mini" id="upNo" style="flex:1">다른 카드 고르기</button></div>`;
+  panel.querySelector(".crow").querySelectorAll(".ccard").forEach(b => b.style.opacity = 1);
+  document.getElementById("upYes").onclick = onYes; document.getElementById("upNo").onclick = onNo;
+}
 const upCard = (r, i) => { r.cards[i].id = r.cards[i].id + "+"; };
 // ----- 휴식: 회복 30% 또는 카드 1장 강화 -----
 renderRest = function(wasHidden){
@@ -3401,7 +3423,8 @@ renderRest = function(wasHidden){
     <button class="tile forge" id="rs1"><div class="ic">🛏</div><div class="nm">쉬기</div><div class="sb">체력 30% 회복</div></button>
     <button class="tile forge" id="rs2"><div class="ic">⚒️</div><div class="nm">수련</div><div class="sb">카드 1장 강화</div></button></div>`;
   document.getElementById("rs1").onclick = () => { const h = Math.round(r.maxHp * 0.3); r.hp = Math.min(r.maxHp, r.hp + h); finishRest(`체력 ${h} 회복`); };
-  document.getElementById("rs2").onclick = () => renderCardPick("⚒️ 강화할 카드", canUp, i => { const nm = CD(r.cards[i].id).name; upCard(r, i); finishRest(`${nm} → ${CD(r.cards[i].id).name}`); }, () => renderRest(wasHidden), c => `<div class="cup">→ ${upText(c.id)}</div>`);
+  const pick = () => renderCardPick("⚒️ 강화할 카드", canUp, i => confirmUpgrade(i, () => { const nm = CD(r.cards[i].id).name; upCard(r, i); finishRest(`${nm} → ${CD(r.cards[i].id).name}`); }, pick), () => renderRest(wasHidden), c => `<div class="cup">→ ${upText(c.id)}</div>`);
+  document.getElementById("rs2").onclick = pick;
 };
 // ----- 대장간: 강화 또는 지우기 중 하나 (무료) -----
 function renderForgeV2(){
@@ -3409,7 +3432,8 @@ function renderForgeV2(){
   panel.innerHTML = `<div class="counter forgec"><b>🔨 대장간</b><span class="cnote">하나만 고를 수 있어요</span></div><div class="tiles big" style="grid-template-columns:repeat(2,1fr)">
     <button class="tile forge" id="fv1"><div class="ic">⚒️</div><div class="nm">모루</div><div class="sb">카드 1장 강화</div></button>
     <button class="tile forge" id="fv2"><div class="ic">✂️</div><div class="nm">숫돌</div><div class="sb">카드 1장 지우기</div></button></div><button class="main" id="lv">그냥 나가기</button>`;
-  document.getElementById("fv1").onclick = () => renderCardPick("⚒️ 강화할 카드", canUp, i => { const nm = CD(r.cards[i].id).name; upCard(r, i); finishRest(`${nm} → ${CD(r.cards[i].id).name}`); }, renderForgeV2, c => `<div class="cup">→ ${upText(c.id)}</div>`);
+  const pick = () => renderCardPick("⚒️ 강화할 카드", canUp, i => confirmUpgrade(i, () => { const nm = CD(r.cards[i].id).name; upCard(r, i); finishRest(`${nm} → ${CD(r.cards[i].id).name}`); }, pick), renderForgeV2, c => `<div class="cup">→ ${upText(c.id)}</div>`);
+  document.getElementById("fv1").onclick = pick;
   document.getElementById("fv2").onclick = () => renderCardPick("✂️ 지울 카드", r.cards.length > 1 ? null : () => false, i => { const nm = CD(r.cards[i].id).name; r.cards.splice(i, 1); finishRest(`${nm} 지움`); }, renderForgeV2);
   document.getElementById("lv").onclick = () => finishRest("대장간을 나왔어요");
 }
