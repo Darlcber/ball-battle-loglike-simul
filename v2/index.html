@@ -3154,6 +3154,16 @@ function autoPats(effs, boss){   // 패턴이 정해지지 않은 적: 자기 �
 }
 const ENEMY_FOCUS = { atk: 1, skill: 0.8, power: 1.5 };   // 적 행동 전 정신집중(초): 멈춰 서고, 내 직접 공격에 맞으면 좌절
 const evFocus = (sk, t) => Math.min(t, ENEMY_FOCUS[actType(sk)] * (sk === "charge" ? 1 : 1));
+// 적 행동의 예상 피해(내 방어력 반영)와 타겟팅 여부: 🎯 = 반드시 맞음(타겟팅), ↗ = 피할 수 있음(논타겟팅)
+const EV_BASE = { spin: 20, bomb: 22, shoot: 17, missile: 13, fireball: 24, frostbolt: 15, dash: 16, zone: 16, nova: 42, boomerang: 24, lightning: 12, sonic: 24, watergun: 14, needle: 9, gust: 8, judgment: 16, hex: 30, quake: 28, poison: 16, charge: 60 };
+const EV_TARGET = new Set(["missile", "lightning", "judgment", "gust", "hex", "quake", "poison", "freeze", "charge"]);
+const EV_PER = { zone: "/초", poison: "/4초" };
+function evInfo(e, sk, P){   // { d: 예상 피해 or null, tg: 타겟팅?, txt }
+  const b = EV_BASE[sk], tg = EV_TARGET.has(sk);
+  const d = b == null ? null : b * e.atk * (1 + (e.atkBonus || 0)) / 12 * ((e.mod && e.mod[sk] && e.mod[sk].pow) || 1) * 12 / (12 + (P ? P.def || 0 : 0));
+  const hasTg = b != null || sk === "freeze";
+  return { d, tg, txt: (d != null ? `⚔${Math.round(d)}${EV_PER[sk] || ""}` : "") + (hasTg ? (tg ? " 🎯" : " ↗") : "") };
+}
 const patsOf = cfg => V2PAT[cfg.tid] || autoPats(cfg.v2effs || [], cfg.tag === "boss");
 
 // ===== 엔진 덮어쓰기 =====
@@ -3278,7 +3288,7 @@ function renderPlan(){
   let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
   const enemyRows = s.rdPlan.en.map((E, ei) => `<div class="tlrow"><div class="tlname en" data-en="${ei}">${E.ball.icon}</div><div class="tlbar">
       <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
-      ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-en="${ei}" data-ev="${vi}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b></div>`).join("")}</div></div>`).join("");
+      ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-en="${ei}" data-ev="${vi}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b><i class="evd">${evInfo(E.ball, v.sk, s.balls[0]).txt}</i></div>`).join("")}</div></div>`).join("");
   const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CD(c.id);
       return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.cast}초</small></span></div>`; }).join("")}
       ${sumAll > 0 ? `<div class="tlghost" style="left:${pct(sumP)};width:${pct(Math.max(0, sumAll - sumP))}"></div>` : ""}<div class="tldrop" id="tldrop"></div></div></div>`;
@@ -3305,7 +3315,7 @@ function renderPlan(){
   panel.querySelectorAll(".tlname.en").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], e = E.ball, c = e.cfg, P = patsOf(c);
     setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} ⚔${fmt(e.atk * (1 + e.atkBonus))} 🛡${e.def}${c.attrs && c.attrs.length ? ` · 속성 ${attrIcons(c.attrs)} 약점 ${attrIcons(c.weak) || "-"}` : ""}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
   panel.querySelectorAll(".tlev[data-ev]").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], v = E.evs[+el.dataset.ev], ty = actType(v.sk);
-    setInfo(`<b>${E.ball.icon} ${SK_FULL(v.sk)}</b> <span class="evc ${ty}">${{ atk: "공격", skill: "스킬", power: "파워" }[ty]}</span> · 정신집중 ${v.f}초 (${(v.t - v.f).toFixed(1)}~${v.t}초, 이때 직접 공격하면 좌절) → ${v.t}초 발동 · ${SKILL[v.sk] ? SKILL[v.sk].desc || "" : ""}`); });
+    setInfo(`<b>${E.ball.icon} ${SK_FULL(v.sk)}</b> <span class="evc ${ty}">${{ atk: "공격", skill: "스킬", power: "파워" }[ty]}</span> · 정신집중 ${v.f}초 (${(v.t - v.f).toFixed(1)}~${v.t}초, 이때 직접 공격하면 좌절) → ${v.t}초 발동${(i => i.d != null ? ` · 예상 피해 <b>${Math.round(i.d)}${EV_PER[v.sk] || ""}</b>` : "")(evInfo(E.ball, v.sk, s.balls[0]))}${EV_BASE[v.sk] != null || v.sk === "freeze" ? (EV_TARGET.has(v.sk) ? " · 🎯 타겟팅(피할 수 없음, 막거나 끊어야 함)" : " · ↗ 논타겟팅(움직임으로 피할 수 있음)") : ""} · ${SKILL[v.sk] ? SKILL[v.sk].desc || "" : ""}`); });
   panel.querySelectorAll(".hcard").forEach(el => { const hi = +el.dataset.hi;
     press(el, () => { if (!V.placed.includes(hi)){ V.placed.push(hi); renderPlan(); } }, () => showInfo(V.hand[hi])); });
   const bar = document.getElementById("tlmine"), drop = document.getElementById("tldrop");
@@ -3352,7 +3362,7 @@ function renderSidesV2(){
   leftBody().innerHTML = `<div class="sideh">🃏 이번 라운드</div>` + tl.map((c, i) => { const C = CD(c.id); return `<div class="card sentc v2c ${C.type}" id="v2c${i}"><span>${C.icon} ${C.name}</span><span class="cnt">${C.cast}초</span></div>`; }).join("");
   const en = s.rd && !s.rd.over ? s.rd.en : (s.rdPlan ? s.rdPlan.en : []);
   rightEl().innerHTML = `<div class="sideh">적 패턴</div>` + en.map((E, ei) => `<div class="ecard"><div class="lab"><b style="color:#fff">${E.ball.icon} ${E.ball.name}</b><span id="v2hp${ei}">❤${fmt(Math.max(0, E.ball.hp))}/${fmt(E.ball.maxHp)}</span></div>${E.ball.trait ? `<div class="small" style="color:#ffb0b0">${TRAIT_TXT[E.ball.trait] || ""}</div>` : ""}
-    ${E.evs.map((v, vi) => `<div class="card sentc ev2 ${actType(v.sk)}" id="v2e${ei}_${vi}" style="padding:3px 6px"><span class="small">${(v.t - v.f).toFixed(1)}~${v.t}초 · ${SK_LABEL(v.sk)}</span></div>`).join("")}</div>`).join("");
+    ${E.evs.map((v, vi) => `<div class="card sentc ev2 ${actType(v.sk)}" id="v2e${ei}_${vi}" style="padding:3px 6px"><span class="small">${(v.t - v.f).toFixed(1)}~${v.t}초 · ${SK_LABEL(v.sk)} <b>${evInfo(E.ball, v.sk, state.balls[0]).txt}</b></span></div>`).join("")}</div>`).join("");
 }
 updateBattleUi = function(){
   const s = state; if (!s || !s.rd || phase !== "battle") return;
@@ -3420,7 +3430,7 @@ document.getElementById("bBook").style.display = "none";
   .tlev{border-left-width:4px}.tlev.atk{border-color:#ff5050;color:#ffb8b8;background:linear-gradient(90deg,rgba(255,80,80,.28),transparent 70%)}
   .tlev.skill{border-color:#4aa8ff;color:#b8dcff;background:linear-gradient(90deg,rgba(74,168,255,.28),transparent 70%)}.tlev.power{border-color:#b070ff;color:#e0c8ff;background:linear-gradient(90deg,rgba(176,112,255,.3),transparent 70%)}
   .tlef{position:absolute;top:2px;bottom:2px;border-radius:3px}.tlef.atk{background:repeating-linear-gradient(45deg,rgba(255,80,80,.4),rgba(255,80,80,.4) 3px,transparent 3px,transparent 6px)}.tlef.skill{background:repeating-linear-gradient(45deg,rgba(74,168,255,.4),rgba(74,168,255,.4) 3px,transparent 3px,transparent 6px)}.tlef.power{background:repeating-linear-gradient(45deg,rgba(176,112,255,.45),rgba(176,112,255,.45) 3px,transparent 3px,transparent 6px)}
-  .tlname.en{cursor:pointer;border-radius:6px;background:#2a1d2a}.tlev[data-ev]{cursor:pointer}.evc{padding:0 3px;border-radius:3px}.evc.atk{background:#5a2424}.evc.skill{background:#1d3a55}.evc.power{background:#3a2458}
+  .tlname.en{cursor:pointer;border-radius:6px;background:#2a1d2a}.tlev[data-ev]{cursor:pointer}.evc{padding:0 3px;border-radius:3px}.tlev .evd{display:block;font-style:normal;font-size:9px;opacity:.9;line-height:1.1}.evc.atk{background:#5a2424}.evc.skill{background:#1d3a55}.evc.power{background:#3a2458}
   .ev2.atk{border-color:#c84a4a}.ev2.skill{border-color:#3a8ac8}.ev2.power{border-color:#a060e8}
   .tlcard{touch-action:none;cursor:grab;user-select:none}.tlcard.dragging{opacity:.75;z-index:5;box-shadow:0 4px 12px rgba(0,0,0,.6)}.tlcard.held,.hcard.held{outline:2px solid #ffe066}
   .tlghost{position:absolute;top:2px;bottom:2px;border:2px dashed #556;border-radius:6px}
@@ -3463,7 +3473,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.5";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.6";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
