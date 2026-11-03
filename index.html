@@ -1156,7 +1156,7 @@ function hurt(s, tgt, src, amount, sk){
   if (s.tick > OT_START) d *= 1 + (s.tick - OT_START) / OT_RAMP;   // 연장전
   d = clamp(d, 0.1, BIG);
   if (tgt.guardT > 0) d *= 0.5; if (tgt.dmgMul) d *= tgt.dmgMul;   // (v2) 수비 태세·철갑
-  if (tgt.focus && src && src !== tgt && tgt.onFizzle) tgt.onFizzle(s);   // (v2) 정신집중 중 직접 공격을 받으면 좌절 (지속 피해는 src 없음)
+  if (tgt.focus && src && src !== tgt && tgt.onFizzle) tgt.onFizzle(s, src);   // (v2) 정신집중 중 직접 공격을 받으면 좌절 (지속 피해는 src 없음)
   if (tgt.parryT > 0){ d *= 0.5; if (src && src !== tgt && !src.dead && src.hp > 0){ src.hp -= d * (tgt.parryPow || 1.5); popS(s, src.x, src.y - src.R - 8, "🛡" + fmt(d * (tgt.parryPow || 1.5))); } }   // 반격 방패
   if (tgt.shieldT > 0 && tgt.shieldHp > 0){ const ab = Math.min(tgt.shieldHp, d); tgt.shieldHp -= ab; d -= ab; if (d <= 0) return; }
   tgt.hp -= d; if (tgt.markT > 0) tgt.markAcc += d;
