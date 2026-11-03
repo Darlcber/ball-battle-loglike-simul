@@ -3101,7 +3101,7 @@ const CARDS = {
   sidestep:{ name: "옆걸음", icon: "👣", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "옆으로 살짝 비켜섬", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(foe.y - me.y, foe.x - me.x) + (s.rng() < 0.5 ? 1.57 : -1.57); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.25); me.dashMult = 2.5; } },
   brace:   { name: "웅크리기", icon: "🐢", type: "skill", cast: 1, focus: 0, rar: 1, desc: "시전 동안 받는 피해 -50%", fire: (s, me, foe, dur) => { me.guardT = T(dur); } },
   breath:  { name: "숨 고르기", icon: "😮‍💨", type: "skill", cast: 0.8, focus: 0.5, rar: 1, desc: "체력 3% 회복", fire: (s, me, foe, dur, m = 1) => { const h = me.maxHp * 0.03 * m; me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "+" + fmt(h)); } },
-  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "시전 동안 받는 피해 -50% + 보호막 5", fire: (s, me, foe, dur, m = 1) => { me.guardT = T(dur); me.shieldHp = Math.min(BIG, me.shieldHp + 5 * m); me.shieldT = Math.max(me.shieldT, T(dur)); } },
+  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "보호막 5", fire: (s, me, foe, dur, m = 1) => { me.shieldHp = Math.min(BIG, me.shieldHp + 5 * m); me.shieldT = Math.max(me.shieldT, T(dur)); } },
   ghost:   { name: "유령화", icon: "👻", type: "skill", cast: 1.5, focus: 0, rar: 3, desc: "시전 동안 모든 공격을 피함", fire: (s, me, foe, dur) => { me.invulnT = Math.max(me.invulnT, T(dur)); } },
   buffer:  { name: "완충", icon: "🔰", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 직접 공격 1번을 완전히 막음", fire: (s, me, foe, dur, m = 1) => { me.blockN = (me.blockN || 0) + (m > 1 ? 2 : 1); } },
   evade:   { name: "회피", icon: "💨", type: "skill", cast: 1, focus: 0, rar: 1, desc: "적 반대쪽으로 빠르게 물러남", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(me.y - foe.y, me.x - foe.x); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.4); me.dashMult = 3; } },
@@ -3185,8 +3185,8 @@ function v2PrepRound(s){
   const V = s.v2; V.round++; V.hand = [];
   const en = s.balls.slice(1).filter(e => !e.dead).map(e => { const P = patsOf(e.cfg); const p = P[(e.v2pi = (e.v2pi || 0) + 1) % P.length]; return { ball: e, pat: p, evs: p.ev.map(([t, sk]) => ({ t, sk, f: evFocus(sk, t), done: false })) }; });
   const L = Math.max(...en.map(x => x.pat.len), 4);
-  let sum = 0;
-  while (sum <= L){
+  let sum = 0; const cap = Math.ceil(L / 2);   // 뽑는 장수 상한 = 패턴 길이 ÷ 2(올림) — 짧은 카드만 들고 가면 시간이 빔
+  while (sum <= L && V.hand.length < cap){
     if (!V.draw.length){ if (!V.disc.length) break; V.draw = v2Shuffle(V.disc.splice(0), s.rng); }
     const id = V.draw.pop(); V.hand.push(id); sum += CD(id).cast;
   }
@@ -3463,7 +3463,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.4";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.5";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔${r.atk + fx.atk} 🛡${r.def + fx.def} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · ⚔ 공격 ${r.atk + fx.atk} · 🛡 방어 ${r.def + fx.def} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -3548,7 +3548,7 @@ chooseRoute = function(i){ const r = runState, o = r.routes[i];
   .ccard:disabled{opacity:.4}.hcard .hnm{white-space:nowrap}`; document.head.appendChild(st); }
 
 // v2 난이도: 레벨업이 없어 플레이어가 안 크므로 적 성장을 줄이고 시작 체력을 늘림 (봇 측정 기준)
-ENEMY_ATK0 = 5; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;
+ENEMY_ATK0 = 4.5; ENEMY_HP_GROW = 1.06; ENEMY_ATK_GROW = 1.02;
 
 { const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
 requestAnimationFrame(loop);
