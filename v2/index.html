@@ -814,7 +814,8 @@ function wShot(me, ab, base, spd, life, homing, r, col, delay, extra, recoil){  
   me.aimT = Math.max(me.aimT, SHOT_AIM + (delay || 0));
 }
 const wArea = (me, ab) => (me.mod[ab.eff] || {}).area || 1;
-function wCircle(s, me, x, y, rad, dmg, sk, after){ for (const f of foesOf(s, me)) if (Math.hypot(f.x - x, f.y - y) < rad + f.R){ hurt(s, f, me, dmg, sk); if (after) after(f); } }
+const HIT_PAD = (s, own) => s.v2 && own && own.id === 0 ? 1 : 0;   // (v2.25) 내 공격 판정은 보이는 것보다 후하게 (1 = 켬)
+function wCircle(s, me, x, y, rad, dmg, sk, after){ const hp = HIT_PAD(s, me); for (const f of foesOf(s, me)) if (Math.hypot(f.x - x, f.y - y) < rad + f.R + 14 * hp){ hurt(s, f, me, dmg, sk); if (after) after(f); } }
 Object.assign(EFF, {
   stick: (s, me, foe, ab) => wSlash(s, me, foe, ab, pw(me, 5, ab), 55),
   chargeshot: (s, me, foe, ab) => {
@@ -1297,13 +1298,14 @@ function step(s){
     for (const tg of foesOf(s, own)){
       if (sl.hit.includes(tg.id)) continue;
       const ddx = tg.x - own.x, ddy = tg.y - own.y, dd = Math.hypot(ddx, ddy);
-      if (dd < sl.range + tg.R && Math.abs(angDiff(Math.atan2(ddy, ddx), sl.ang)) < 0.3 + tg.R / Math.max(dd, 1)){ sl.hit.push(tg.id); hurt(s, tg, own, sl.dmg, sl.sk); }
+      const hp = HIT_PAD(s, own);   // 내 휘두르기: 사거리 ×1.4 + 16, 각도 여유 +0.5rad
+      if (dd < sl.range * (1 + 0.4 * hp) + tg.R + 16 * hp && Math.abs(angDiff(Math.atan2(ddy, ddx), sl.ang)) < 0.3 + 0.5 * hp + tg.R / Math.max(dd, 1)){ sl.hit.push(tg.id); hurt(s, tg, own, sl.dmg, sl.sk); }
     }
   }
   for (let i = s.dashes.length - 1; i >= 0; i--){
     const ds = s.dashes[i], own = s.balls[ds.owner];
     if (--ds.t <= 0){ s.dashes.splice(i, 1); if (own.id === 0 && s.depth < 3){ s.depth++; fire(s, own, "dashend", {}); s.depth--; } continue; }
-    for (const tg of foesOf(s, own)) if (!ds.hit.includes(tg.id) && Math.hypot(tg.x - own.x, tg.y - own.y) < own.R + tg.R + 4){
+    for (const tg of foesOf(s, own)) if (!ds.hit.includes(tg.id) && Math.hypot(tg.x - own.x, tg.y - own.y) < own.R + tg.R + 4 + 14 * HIT_PAD(s, own)){
       ds.hit.push(tg.id); hurt(s, tg, own, ds.dmg, ds.sk);
       if (tg.spikes && !own.dead){ hurt(s, own, tg, ds.dmg * tg.spikes); popS(s, own.x, own.y - own.R - 6, "🦔가시"); }   // 가시 갑옷: 돌진 피해의 일부를 되돌려 받음 s.booms.push({ x: (own.x + tg.x) / 2, y: (own.y + tg.y) / 2, r: 36, t: 0 });
     }
@@ -1311,7 +1313,7 @@ function step(s){
   for (let i = s.zones.length - 1; i >= 0; i--){
     const z = s.zones[i], own = s.balls[z.owner];
     if (--z.t <= 0){ s.zones.splice(i, 1); continue; }
-    if (s.tick % 30 === 0) for (const tg of foesOf(s, own)) if (Math.hypot(tg.x - z.x, tg.y - z.y) < z.r + tg.R) hurt(s, tg, own, z.dps / 2, z.sk);
+    if (s.tick % 30 === 0) for (const tg of foesOf(s, own)) if (Math.hypot(tg.x - z.x, tg.y - z.y) < z.r + tg.R + 12 * HIT_PAD(s, own)) hurt(s, tg, own, z.dps / 2, z.sk);
   }
   stepObjs(s);
   for (let i = s.shots.length - 1; i >= 0; i--){
@@ -1330,7 +1332,7 @@ function step(s){
       } else { s.shots.splice(i, 1); continue; }
     }
     sh.hit = sh.hit.filter(id => { const f = s.balls[id]; return f && !f.dead && Math.hypot(f.x - sh.x, f.y - sh.y) < f.R + (sh.r || 7) + 2; });   // 관통 중인 적과 겹쳐 있는 동안만 중복 피해 방지 (벗어난 뒤 다시 맞으면 피해)
-    const tg = fl.find(f => !sh.hit.includes(f.id) && Math.hypot(f.x - sh.x, f.y - sh.y) < f.R + (sh.r || 7));
+    const pad = 12 * HIT_PAD(s, own), tg = fl.find(f => !sh.hit.includes(f.id) && Math.hypot(f.x - sh.x, f.y - sh.y) < f.R + (sh.r || 7) + pad);   // 내 투사체는 판정 +12
     if (tg){
       hurt(s, tg, own, sh.dmg, sh.sk); s.shotStat.hit++;
       if (sh.pierceAll) sh.hit.push(tg.id);
@@ -1348,15 +1350,16 @@ function step(s){
       if (d < 16 || bm.t > 200){ s.boomers.splice(i, 1); continue; }
       bm.x += dx / d * 6 * (bm.spd || 1); bm.y += dy / d * 6 * (bm.spd || 1);
     }
-    for (const tg of foesOf(s, own)) if (!bm.hit.includes(tg.id) && Math.hypot(tg.x - bm.x, tg.y - bm.y) < tg.R + 11){ bm.hit.push(tg.id); hurt(s, tg, own, bm.dmg, bm.sk); }
+    for (const tg of foesOf(s, own)) if (!bm.hit.includes(tg.id) && Math.hypot(tg.x - bm.x, tg.y - bm.y) < tg.R + 11 + 10 * HIT_PAD(s, own)){ bm.hit.push(tg.id); hurt(s, tg, own, bm.dmg, bm.sk); }
   }
   for (let i = s.mines.length - 1; i >= 0; i--){
     const m = s.mines[i], own = s.balls[m.owner], fl = foesOf(s, own);
     if (--m.t <= 0){ s.mines.splice(i, 1); continue; }
     if (m.arm > 0){ m.arm--; continue; }
-    if (fl.some(f => Math.hypot(f.x - m.x, f.y - m.y) < m.trig + f.R)){
+    const mp = 12 * HIT_PAD(s, own);
+    if (fl.some(f => Math.hypot(f.x - m.x, f.y - m.y) < m.trig + f.R + mp)){
       s.booms.push({ x: m.x, y: m.y, r: m.r, t: 0 });
-      for (const f of fl) if (Math.hypot(f.x - m.x, f.y - m.y) < m.r + f.R) hurt(s, f, own, m.dmg, m.sk);
+      for (const f of fl) if (Math.hypot(f.x - m.x, f.y - m.y) < m.r + f.R + mp) hurt(s, f, own, m.dmg, m.sk);
       s.mines.splice(i, 1);
     }
   }
@@ -3111,7 +3114,10 @@ const CARDS = {
   spear:   { name: "투척창", icon: "🔱", type: "atk", cast: 2, focus: 1.5, rar: 1, desc: "모든 적을 꿰뚫는 창 (피해 8)", fire: (s, me, foe) => wShot(me, wab("stick"), 8, 11, 160, 0, 7, "#e8e8e8", 0, { pierceAll: true }) },
   hook:    { name: "갈고리", icon: "🪝", type: "atk", cast: 1, focus: 0.5, rar: 1, desc: "적을 끌어옴 (피해 4)", fire: (s, me, foe) => EFF.hook(s, me, foe, wab("hook", 0.5)) },
   flurry:  { name: "난타", icon: "⚔", type: "atk", cast: 2, focus: 1, rar: 2, desc: "세 번 연달아 벰 (3 × 3)", fire: (s, me, foe) => { for (let i = 0; i < 3; i++) wSlash(s, me, foe, wab("stick"), pw(me, 3, wab("stick")), 70); } },
-  heavy:   { name: "지면 강타", icon: "🔨", type: "atk", cast: 3, focus: 2.5, rar: 2, desc: "주변을 내리침 (피해 13, 범위 90) + 적 둔화", fire: (s, me, foe) => EFF.hammer(s, me, foe, wab("hammer", 0.433)) },
+  heavy:   { name: "지면 강타", icon: "🔨", type: "atk", cast: 3, focus: 2.5, rar: 2, desc: "가까운 적 쪽으로 내리침 (피해 13, 범위 90) + 적 둔화", fire: (s, me, foe) => { const ab = wab("hammer", 0.433), f = nearFoe(s, me) || foe, rad = 90 * wArea(me, ab); let x = me.x, y = me.y;
+    if (f){ const d = Math.hypot(f.x - me.x, f.y - me.y) || 1, k = Math.min(1, 80 / d); x = me.x + (f.x - me.x) * k; y = me.y + (f.y - me.y) * k; me.hx = (f.x - me.x) / d; me.hy = (f.y - me.y) / d; me.dashT = T(0.25); me.dashMult = 2.6; }   // (v2.25) 적 쪽으로 최대 80만큼 앞에서 내리침
+    s.booms.push({ x, y, r: rad, t: 0, col: "#d8b070" }); s.shake = Math.min(9, s.shake + 3);
+    wCircle(s, me, x, y, rad, pw(me, 30, ab), "hammer", g => { g.slowT = Math.max(g.slowT, T(0.8)); g.slowMult = Math.min(g.slowMult || 1, 0.15); }); } },
   sniper:  { name: "저격", icon: "🔭", type: "atk", cast: 4, focus: 3, rar: 2, desc: "즉시 명중, 멀수록 강함 (최대 26)", fire: (s, me, foe) => EFF.sniper(s, me, foe, wab("sniper", 0.368)) },
   vortex:  { name: "회오리", icon: "🌀", type: "atk", cast: 3, focus: 2, rar: 2, desc: "4초간 적을 빨아들이며 피해", fire: (s, me, foe) => EFF.vortex(s, me, foe, wab("vortex", 0.55)) },
   flamer:  { name: "화염 방사", icon: "🔥", type: "atk", cast: 3, focus: 1, rar: 2, desc: "1.5초간 앞쪽에 불길", fire: (s, me, foe) => EFF.flamer(s, me, foe, wab("flamer", 0.45)) },
@@ -3361,7 +3367,7 @@ function v2Tick(s){
   if (P.brinkM){ P.atkBonus -= P.brinkAdd || 0; P.brinkAdd = P.lostHp / P.maxHp * P.brinkM; P.atkBonus += P.brinkAdd; }
   if (V.timed.length){ for (const e of V.timed) if (s.tick >= e.at){ e.done = true; e.fn(); } V.timed = V.timed.filter(e => !e.done); }
   for (const b of V.bombs){ if (b.tgt && !b.tgt.dead && b.tgt.hp > 0){ b.x = b.tgt.x; b.y = b.tgt.y; } }
-  for (const b of V.bombs) if (s.tick >= b.at){ b.done = true; s.booms.push({ x: b.x, y: b.y, r: b.r, t: 0, col: "#ff8a3a" }); s.shake = Math.min(9, s.shake + 4); for (const f of foesOf(s, P)) if (!f.dead && Math.hypot(f.x - b.x, f.y - b.y) < b.r + f.R) hurt(s, f, P, b.dmg, "bomb"); }
+  for (const b of V.bombs) if (s.tick >= b.at){ b.done = true; s.booms.push({ x: b.x, y: b.y, r: b.r, t: 0, col: "#ff8a3a" }); s.shake = Math.min(9, s.shake + 4); for (const f of foesOf(s, P)) if (!f.dead && Math.hypot(f.x - b.x, f.y - b.y) < b.r + f.R + 14) hurt(s, f, P, b.dmg, "bomb"); }
   V.bombs = V.bombs.filter(b => !b.done);
   for (const f of foesOf(s, P)){ const w = f.wk; if (!w || f.dead) continue; if (s.tick > w.until || w.n <= 0){ f.wk = null; continue; }
     if (s.tick >= w.cd && atWall(f)){ w.n--; w.cd = s.tick + 20; const d = w.dmg * (P.arenaM ? 1 + 0.5 * P.arenaM : 1); s.booms.push({ x: f.x, y: f.y, r: 36, t: 0, col: "#ffd090" }); s.shake = Math.min(9, s.shake + 5); hurt(s, f, P, d); popS(s, f.x, f.y - f.R - 20, "🧱벽꿍!");
@@ -3751,7 +3757,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.24";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.25";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";

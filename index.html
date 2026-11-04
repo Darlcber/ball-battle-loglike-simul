@@ -814,7 +814,8 @@ function wShot(me, ab, base, spd, life, homing, r, col, delay, extra, recoil){  
   me.aimT = Math.max(me.aimT, SHOT_AIM + (delay || 0));
 }
 const wArea = (me, ab) => (me.mod[ab.eff] || {}).area || 1;
-function wCircle(s, me, x, y, rad, dmg, sk, after){ for (const f of foesOf(s, me)) if (Math.hypot(f.x - x, f.y - y) < rad + f.R){ hurt(s, f, me, dmg, sk); if (after) after(f); } }
+const HIT_PAD = (s, own) => s.v2 && own && own.id === 0 ? 1 : 0;   // (v2.25) 내 공격 판정은 보이는 것보다 후하게 (1 = 켬)
+function wCircle(s, me, x, y, rad, dmg, sk, after){ const hp = HIT_PAD(s, me); for (const f of foesOf(s, me)) if (Math.hypot(f.x - x, f.y - y) < rad + f.R + 14 * hp){ hurt(s, f, me, dmg, sk); if (after) after(f); } }
 Object.assign(EFF, {
   stick: (s, me, foe, ab) => wSlash(s, me, foe, ab, pw(me, 5, ab), 55),
   chargeshot: (s, me, foe, ab) => {
@@ -1297,13 +1298,14 @@ function step(s){
     for (const tg of foesOf(s, own)){
       if (sl.hit.includes(tg.id)) continue;
       const ddx = tg.x - own.x, ddy = tg.y - own.y, dd = Math.hypot(ddx, ddy);
-      if (dd < sl.range + tg.R && Math.abs(angDiff(Math.atan2(ddy, ddx), sl.ang)) < 0.3 + tg.R / Math.max(dd, 1)){ sl.hit.push(tg.id); hurt(s, tg, own, sl.dmg, sl.sk); }
+      const hp = HIT_PAD(s, own);   // 내 휘두르기: 사거리 ×1.4 + 16, 각도 여유 +0.5rad
+      if (dd < sl.range * (1 + 0.4 * hp) + tg.R + 16 * hp && Math.abs(angDiff(Math.atan2(ddy, ddx), sl.ang)) < 0.3 + 0.5 * hp + tg.R / Math.max(dd, 1)){ sl.hit.push(tg.id); hurt(s, tg, own, sl.dmg, sl.sk); }
     }
   }
   for (let i = s.dashes.length - 1; i >= 0; i--){
     const ds = s.dashes[i], own = s.balls[ds.owner];
     if (--ds.t <= 0){ s.dashes.splice(i, 1); if (own.id === 0 && s.depth < 3){ s.depth++; fire(s, own, "dashend", {}); s.depth--; } continue; }
-    for (const tg of foesOf(s, own)) if (!ds.hit.includes(tg.id) && Math.hypot(tg.x - own.x, tg.y - own.y) < own.R + tg.R + 4){
+    for (const tg of foesOf(s, own)) if (!ds.hit.includes(tg.id) && Math.hypot(tg.x - own.x, tg.y - own.y) < own.R + tg.R + 4 + 14 * HIT_PAD(s, own)){
       ds.hit.push(tg.id); hurt(s, tg, own, ds.dmg, ds.sk);
       if (tg.spikes && !own.dead){ hurt(s, own, tg, ds.dmg * tg.spikes); popS(s, own.x, own.y - own.R - 6, "🦔가시"); }   // 가시 갑옷: 돌진 피해의 일부를 되돌려 받음 s.booms.push({ x: (own.x + tg.x) / 2, y: (own.y + tg.y) / 2, r: 36, t: 0 });
     }
@@ -1311,7 +1313,7 @@ function step(s){
   for (let i = s.zones.length - 1; i >= 0; i--){
     const z = s.zones[i], own = s.balls[z.owner];
     if (--z.t <= 0){ s.zones.splice(i, 1); continue; }
-    if (s.tick % 30 === 0) for (const tg of foesOf(s, own)) if (Math.hypot(tg.x - z.x, tg.y - z.y) < z.r + tg.R) hurt(s, tg, own, z.dps / 2, z.sk);
+    if (s.tick % 30 === 0) for (const tg of foesOf(s, own)) if (Math.hypot(tg.x - z.x, tg.y - z.y) < z.r + tg.R + 12 * HIT_PAD(s, own)) hurt(s, tg, own, z.dps / 2, z.sk);
   }
   stepObjs(s);
   for (let i = s.shots.length - 1; i >= 0; i--){
@@ -1330,7 +1332,7 @@ function step(s){
       } else { s.shots.splice(i, 1); continue; }
     }
     sh.hit = sh.hit.filter(id => { const f = s.balls[id]; return f && !f.dead && Math.hypot(f.x - sh.x, f.y - sh.y) < f.R + (sh.r || 7) + 2; });   // 관통 중인 적과 겹쳐 있는 동안만 중복 피해 방지 (벗어난 뒤 다시 맞으면 피해)
-    const tg = fl.find(f => !sh.hit.includes(f.id) && Math.hypot(f.x - sh.x, f.y - sh.y) < f.R + (sh.r || 7));
+    const pad = 12 * HIT_PAD(s, own), tg = fl.find(f => !sh.hit.includes(f.id) && Math.hypot(f.x - sh.x, f.y - sh.y) < f.R + (sh.r || 7) + pad);   // 내 투사체는 판정 +12
     if (tg){
       hurt(s, tg, own, sh.dmg, sh.sk); s.shotStat.hit++;
       if (sh.pierceAll) sh.hit.push(tg.id);
@@ -1348,15 +1350,16 @@ function step(s){
       if (d < 16 || bm.t > 200){ s.boomers.splice(i, 1); continue; }
       bm.x += dx / d * 6 * (bm.spd || 1); bm.y += dy / d * 6 * (bm.spd || 1);
     }
-    for (const tg of foesOf(s, own)) if (!bm.hit.includes(tg.id) && Math.hypot(tg.x - bm.x, tg.y - bm.y) < tg.R + 11){ bm.hit.push(tg.id); hurt(s, tg, own, bm.dmg, bm.sk); }
+    for (const tg of foesOf(s, own)) if (!bm.hit.includes(tg.id) && Math.hypot(tg.x - bm.x, tg.y - bm.y) < tg.R + 11 + 10 * HIT_PAD(s, own)){ bm.hit.push(tg.id); hurt(s, tg, own, bm.dmg, bm.sk); }
   }
   for (let i = s.mines.length - 1; i >= 0; i--){
     const m = s.mines[i], own = s.balls[m.owner], fl = foesOf(s, own);
     if (--m.t <= 0){ s.mines.splice(i, 1); continue; }
     if (m.arm > 0){ m.arm--; continue; }
-    if (fl.some(f => Math.hypot(f.x - m.x, f.y - m.y) < m.trig + f.R)){
+    const mp = 12 * HIT_PAD(s, own);
+    if (fl.some(f => Math.hypot(f.x - m.x, f.y - m.y) < m.trig + f.R + mp)){
       s.booms.push({ x: m.x, y: m.y, r: m.r, t: 0 });
-      for (const f of fl) if (Math.hypot(f.x - m.x, f.y - m.y) < m.r + f.R) hurt(s, f, own, m.dmg, m.sk);
+      for (const f of fl) if (Math.hypot(f.x - m.x, f.y - m.y) < m.r + f.R + mp) hurt(s, f, own, m.dmg, m.sk);
       s.mines.splice(i, 1);
     }
   }
