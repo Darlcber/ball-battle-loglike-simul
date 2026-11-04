@@ -3758,7 +3758,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.27";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.28";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -4135,6 +4135,44 @@ function v2EvHtml(e, v, P){
     ${e.cfg && MON_NOTE[e.cfg.mon] ? `<div class="small" style="color:#ffd27a">특성: ${MON_NOTE[e.cfg.mon]}</div>` : ""}`;
 }
 function v2ShowEv(e, v){ openInfo("적 행동", v2EvHtml(e, v, state.balls[0])); }
+
+// ===== (v2.28) 🕹 조향 조이스틱: 공은 계속 굴러가고 벽에서 튕김. 조이스틱은 진행 방향만 천천히 틂 =====
+const JOY = { on: (() => { try { return localStorage.getItem("v2joy") !== "0"; } catch (e) { return true; } })(), x: 0, y: 0, m: 0, id: null, ox: 0, oy: 0 };
+const JOY_TURN = 0.07, JOY_R = 46;   // 한 틱에 꺾이는 최대 각도(rad, 끝까지 밀었을 때) · 조이스틱 반경(px)
+const stepJoy = step;
+step = function(s){
+  if (s.v2 && s === state && JOY.on && JOY.m > 0.2 && phase === "battle" && s.rd && !s.rd.over){ const P = s.balls[0];
+    if (!P.dead && !(P.dashT > 0)){ const want = Math.atan2(JOY.y, JOY.x), cur = Math.atan2(P.hy, P.hx), d = clamp(angDiff(want, cur), -JOY_TURN * JOY.m, JOY_TURN * JOY.m), a = cur + d; P.hx = Math.cos(a); P.hy = Math.sin(a); } }   // 달려들기·돌진 중엔 카드가 정한 방향 우선
+  stepJoy(s);
+};
+{ const st = document.createElement("style"); st.textContent = `#joyz{position:fixed;z-index:6;touch-action:none;border-radius:12px;background:rgba(120,140,220,.06);border:1px dashed rgba(150,170,255,.25);display:none}
+  #joyz .jl{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:11px;color:#8a93c0;pointer-events:none}
+  #joyz .jb{position:absolute;width:${JOY_R * 2}px;height:${JOY_R * 2}px;margin:-${JOY_R}px 0 0 -${JOY_R}px;border-radius:50%;border:2px solid rgba(160,180,255,.5);background:rgba(60,80,160,.25);pointer-events:none;display:none}
+  #joyz .jk{position:absolute;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;background:rgba(170,190,255,.75);box-shadow:0 0 10px rgba(140,170,255,.6);pointer-events:none;display:none}`; document.head.appendChild(st); }
+const joyZ = document.createElement("div"); joyZ.id = "joyz"; joyZ.innerHTML = `<div class="jl">🕹 여기를 끌어서 방향 조종</div><div class="jb"></div><div class="jk"></div>`; document.body.appendChild(joyZ);
+const joyB = joyZ.querySelector(".jb"), joyK = joyZ.querySelector(".jk");
+function joyPlace(){   // 왼쪽 패널에서 내 초상화 아래 빈 곳을 조이스틱 영역으로
+  const show = JOY.on && phase === "battle" && state && state.v2; joyZ.style.display = show ? "block" : "none"; if (!show) return;
+  const L = document.getElementById("left"), pc = L && L.querySelector(".pcard"); if (!L) return; const r = L.getBoundingClientRect(), top = pc ? pc.getBoundingClientRect().bottom + 6 : r.top + r.height * 0.35;
+  Object.assign(joyZ.style, { left: r.left + "px", top: top + "px", width: r.width + "px", height: Math.max(80, r.bottom - top) + "px" }); }
+function joyReset(){ JOY.x = JOY.y = JOY.m = 0; JOY.id = null; joyB.style.display = joyK.style.display = "none"; }
+joyZ.addEventListener("pointerdown", e => { e.preventDefault(); const r = joyZ.getBoundingClientRect(); JOY.id = e.pointerId; JOY.ox = e.clientX - r.left; JOY.oy = e.clientY - r.top; joyZ.setPointerCapture(e.pointerId);
+  joyB.style.left = joyK.style.left = JOY.ox + "px"; joyB.style.top = joyK.style.top = JOY.oy + "px"; joyB.style.display = joyK.style.display = "block"; });
+joyZ.addEventListener("pointermove", e => { if (e.pointerId !== JOY.id) return; const r = joyZ.getBoundingClientRect(); let dx = e.clientX - r.left - JOY.ox, dy = e.clientY - r.top - JOY.oy; const d = Math.hypot(dx, dy);
+  if (d > JOY_R){ dx *= JOY_R / d; dy *= JOY_R / d; } JOY.x = dx; JOY.y = dy; JOY.m = Math.min(1, d / JOY_R); joyK.style.left = JOY.ox + dx + "px"; joyK.style.top = JOY.oy + dy + "px"; });
+for (const ev of ["pointerup", "pointercancel"]) joyZ.addEventListener(ev, e => { if (e.pointerId === JOY.id) joyReset(); });
+{ const ub = updateBattleUi; updateBattleUi = function(){ ub(); if (state && state.v2 && state.tick % 15 === 0) joyPlace(); }; }
+{ const rp = renderPlan; renderPlan = function(){ rp(); joyReset(); joyPlace(); }; }
+window.addEventListener("resize", joyPlace);
+setInterval(joyPlace, 400);   // 화면 전환(계획 ↔ 전투 ↔ 지도) 따라가기
+// 내 공에 진행 방향 화살표 (조향 켜졌을 때)
+{ const dr = drawV2; drawV2 = function(c, s){ dr(c, s); if (!JOY.on || !s.rd || s.rd.over) return; const P = s.balls[0]; if (P.dead) return;
+  c.save(); c.translate(P.x + P.hx * (P.R + 9), P.y + P.hy * (P.R + 9)); c.rotate(Math.atan2(P.hy, P.hx)); c.fillStyle = JOY.m > 0.2 ? "#a8c0ff" : "rgba(168,192,255,.45)";
+  c.beginPath(); c.moveTo(7, 0); c.lineTo(-4, -6); c.lineTo(-4, 6); c.closePath(); c.fill(); c.restore();
+  if (JOY.m > 0.2){ const a = Math.atan2(JOY.y, JOY.x); c.save(); c.strokeStyle = "rgba(168,192,255,.5)"; c.setLineDash([4, 4]); c.lineWidth = 2; c.beginPath(); c.moveTo(P.x, P.y); c.lineTo(P.x + Math.cos(a) * 60, P.y + Math.sin(a) * 60); c.stroke(); c.restore(); } }; }
+// 🛠 켜기/끄기
+{ const row = document.querySelector("#devbox .row"); if (row){ const b = document.createElement("button"); b.className = "dbg"; const lab = () => b.textContent = JOY.on ? "🕹 조향 끄기" : "🕹 조향 켜기"; lab();
+  b.onclick = () => { JOY.on = !JOY.on; try { localStorage.setItem("v2joy", JOY.on ? "1" : "0"); } catch (e) {} lab(); joyReset(); joyPlace(); }; row.insertBefore(b, row.firstChild); } }
 
 { const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
 requestAnimationFrame(loop);
