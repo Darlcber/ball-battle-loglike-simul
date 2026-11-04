@@ -3074,7 +3074,7 @@ const V2_SAVE = "ballTowerV2";
 let V2_PDMG = 1, V2_EDMG = 1;   // 연장전을 끈 대신 내 피해 / 적 피해 배율 (끝부분에서 조정)
 const CARD_TYPE = { atk: { name: "공격", col: "#c84a4a" }, skill: { name: "스킬", col: "#3a8ac8" }, power: { name: "파워", col: "#a060e8" }, blank: { name: "공백", col: "#777" }, curse: { name: "저주", col: "#7a4a8a" } };
 // 보호막은 이번 패턴(라운드)이 끝날 때까지만
-function v2Shield(s, me, amt){ amt = Math.round((amt + (me.dex || 0)) * (me.skMul || 1)); if (amt <= 0) return; const rd = s.rd, rem = rd && !rd.over ? rd.T - (s.tick - rd.t0) / 60 : 5; me.shieldHp = Math.min(BIG, me.shieldHp + amt); me.shieldT = Math.max(me.shieldT, Math.ceil(rem * 60) + 1); popS(s, me.x, me.y - me.R - 22, "🛡+" + fmt(amt)); }
+function v2Shield(s, me, amt){ amt = Math.round((amt + (me.dex || 0)) * (me.skMul || 1) * (me.frailR > 0 ? 0.75 : 1)); if (amt <= 0) return; const rd = s.rd, rem = rd && !rd.over ? rd.T - (s.tick - rd.t0) / 60 : 5; me.shieldHp = Math.min(BIG, me.shieldHp + amt); me.shieldT = Math.max(me.shieldT, Math.ceil(rem * 60) + 1); popS(s, me.x, me.y - me.R - 22, "🛡+" + fmt(amt)); }
 // 빈 시간 = 이번 라운드에서 내 카드가 없는 시간 (공백 카드 + 끝에 남는 시간)
 function v2Blank(s){ const rd = s.rd; if (!rd) return 0; return Math.max(0, rd.T - rd.plan.reduce((a, c) => a + (c.end - c.start), 0)); }   // 빈 시간 = 카드가 없는 시간
 // X초 카드 길이: 패턴 끝까지 남은 시간 (계획 화면에서 계산해 둠)
@@ -3095,7 +3095,8 @@ function v2NextEv(s){ const rd = s.rd; if (!rd) return null; const rt = (s.tick 
   for (const E of rd.en) if (!E.ball.dead) for (const v of E.evs) if (!v.done && !v.fizzled && v.t > rt && (!best || v.t < best.v.t)) best = { E, v }; return best; }
 // (v2.14) 슬더스식 효과: 힘(1당 공격 +10%, = atkBonus 0.1), 취약(받는 공격 +50%)·약화(주는 공격 -25%)는 라운드 단위, 금속화(라운드 시작마다 보호막)
 function v2Str(s, b, n){ b.atkBonus += 0.1 * n; popS(s, b.x, b.y - b.R - 26, `💪힘${n > 0 ? "+" : ""}${n}`); }
-function v2Debuff(s, b, key, n){ if (!b || b.dead) return; if (b.artifact > 0){ b.artifact--; popS(s, b.x, b.y - b.R - 26, "🔷무효"); return; } b[key] = (b[key] || 0) + n; popS(s, b.x, b.y - b.R - 26, (key === "vulnR" ? "💔취약" : "🥀약화") + n); }
+function v2Debuff(s, b, key, n){ if (!b || b.dead) return; if (b.artifact > 0){ b.artifact--; popS(s, b.x, b.y - b.R - 26, "🔷무효"); return; } b[key] = (b[key] || 0) + n; if (b.id === 0 && s.rd && !s.rd.over) b[key + "F"] = 1;   // (v2.22) 적이 나에게 건 건 이번 라운드 끝에 안 줄어듦 → 다음 라운드까지 확실히
+  popS(s, b.x, b.y - b.R - 26, ({ vulnR: "💔취약", weakR: "🥀약화", frailR: "🫥허약", entangleR: "🕸속박" })[key] + n); }
 const nearFoe = (s, me) => foesOf(s, me).filter(f => !f.dead && f.hp > 0).sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y))[0];
 const rint = (n, m) => Math.round(n * (m || 1));
 function v2SelfCost(s, me, n){ const d = Math.min(n, me.hp - 1); if (d > 0){ me.hp -= d; s.hurtT = 8; popS(s, me.x, me.y - me.R - 30, "🩸-" + fmt(d)); } }
@@ -3266,18 +3267,21 @@ function autoPats(effs, boss){   // 패턴이 정해지지 않은 적: 자기 �
   return P;
 }
 const ENEMY_FOCUS = { atk: 1, skill: 0.8, power: 1.5 };   // 적 행동 전 정신집중(초): 멈춰 서고, 내 직접 공격에 맞으면 좌절
-const evFocus = (sk, t) => Math.min(t, ENEMY_FOCUS[actType(sk)] * (sk === "charge" ? 1 : 1));
+const evFocus = (sk, t) => Math.min(t, (SKILL[sk] && SKILL[sk].v2 && SKILL[sk].v2.focus) || ENEMY_FOCUS[actType(sk)]);
 // 적 행동의 예상 피해(내 방어력 반영)와 타겟팅 여부: 🎯 = 반드시 맞음(타겟팅), ↗ = 피할 수 있음(논타겟팅)
 const EV_BASE = { spin: 20, bomb: 22, shoot: 17, missile: 13, fireball: 24, frostbolt: 15, dash: 16, zone: 16, nova: 42, boomerang: 24, lightning: 12, sonic: 24, watergun: 14, needle: 9, gust: 8, judgment: 16, hex: 30, quake: 28, poison: 16, charge: 60 };
 const EV_TARGET = new Set(["missile", "lightning", "judgment", "gust", "hex", "quake", "poison", "freeze", "charge"]);
 const EV_PER = { zone: "/초", poison: "/4초" };
 function evInfo(e, sk, P){   // { d: 예상 피해 or null, tg: 타겟팅?, txt }
+  const M2 = SKILL[sk] && SKILL[sk].v2; if (M2){ const b0 = M2.dyn ? M2.dyn(state, e, P || {}) : M2.d; if (b0 == null) return { d: null, tg: false, txt: "" };
+    const d = b0 * (1 + (e.atkBonus || 0)) * 12 / (12 + (P ? P.def || 0 : 0)) * V2_EDMG * (P && P.vulnR > 0 ? 1.5 : 1) * (e.weakR > 0 ? 0.75 : 1), tg = M2.kind === "sure";
+    return { d, n: M2.n, tg, txt: `⚔${Math.max(1, Math.round(d))}${M2.n > 1 ? "×" + M2.n : ""}` + (tg ? " 🎯" : " ↗") }; }
   const b = EV_BASE[sk], tg = EV_TARGET.has(sk);
   const d = b == null ? null : b * e.atk * (1 + (e.atkBonus || 0)) / 12 * ((e.mod && e.mod[sk] && e.mod[sk].pow) || 1) * 12 / (12 + (P ? P.def || 0 : 0)) * V2_EDMG * (P && P.vulnR > 0 ? 1.5 : 1) * (e.weakR > 0 ? 0.75 : 1);
   const hasTg = b != null || sk === "freeze";
   return { d, tg, txt: (d != null ? `⚔${Math.round(d)}${EV_PER[sk] || ""}` : "") + (hasTg ? (tg ? " 🎯" : " ↗") : "") };
 }
-const patsOf = cfg => V2PAT[cfg.tid] || autoPats(cfg.v2effs || [], cfg.tag === "boss");
+const patsOf = cfg => cfg.mon && MON[cfg.mon] ? MON[cfg.mon].pats : V2PAT[cfg.tid] || autoPats(cfg.v2effs || [], cfg.tag === "boss");
 
 // ===== 엔진 덮어쓰기 =====
 const makeEnemy0 = makeEnemy;
@@ -3313,7 +3317,7 @@ function startFightV2(r){
 // 한 라운드 준비: 적마다 다음 패턴 → 길이 L, 내 카드는 시전 합이 L을 처음 넘을 때까지 뽑음
 function v2PrepRound(s){
   const V = s.v2; V.round++; V.hand = []; V.xDur = 2;
-  const en = s.balls.slice(1).filter(e => !e.dead).map(e => { const P = patsOf(e.cfg); const p = P[(e.v2pi = (e.v2pi || 0) + 1) % P.length]; return { ball: e, pat: p, evs: p.ev.map(([t, sk]) => ({ t, sk, f: evFocus(sk, t), done: false })) }; });
+  const en = s.balls.slice(1).filter(e => !e.dead).map(e => { const P = patsOf(e.cfg); const p = e.cfg.mon ? v2MonPattern(s, e) : P[(e.v2pi = (e.v2pi || 0) + 1) % P.length]; return { ball: e, pat: p, evs: p.ev.map(([t, sk]) => ({ t, sk, f: evFocus(sk, t), done: false })) }; });
   const L = Math.max(...en.map(x => x.pat.len), 4);
   const P0 = s.balls[0];
   if (P0.tsense) for (const E of en) for (const v of E.evs) v.t = Math.min(v.t + P0.tsense, E.pat.len - 0.05);   // 시간 감각
@@ -3340,7 +3344,7 @@ function v2Execute(s){
   if (V.planT){ plan = V.planT.map((p, i) => { const C = CD(p.id); return { i, id: p.id, start: p.start, fEnd: p.start + Math.min(p.dur, C.focus * V.focusMul), end: p.start + p.dur }; }); V.planT = null; }
   else { let t = 0; plan = []; const over = [];   // 봇: 앞에서부터 붙여서, 내 시간·패턴 길이 안까지만
     V.hand.forEach((id, i) => { const C = CD(id), d = C.x ? Math.max(SNAP, Math.floor((B - t) / SNAP) * SNAP) : C.cast;
-      if (id !== "_blank" && t + d <= Math.min(B, L) + 1e-6){ plan.push({ i, id, start: t, fEnd: t + Math.min(d, C.focus * V.focusMul), end: t + d }); t += d; } else if (id !== "_blank") over.push(id); });
+      if (id !== "_blank" && !v2Blocked(s, id) && t + d <= Math.min(B, L) + 1e-6){ plan.push({ i, id, start: t, fEnd: t + Math.min(d, C.focus * V.focusMul), end: t + d }); t += d; } else if (id !== "_blank") over.push(id); });
     if (over.length) V.unused = (V.unused || []).concat(over); }
   s.rd = { t0: s.tick, L, T: L, plan, en: s.rdPlan.en, over: false, cur: null };
   for (const b of s.balls) if (b.metal && !b.dead) v2Shield(s, b, b.metal);   // 금속화
@@ -3371,7 +3375,7 @@ function v2Tick(s){
     const dup = C.type !== "power" && !cur.id.startsWith("replay") ? P.dupNext : 0; if (dup) P.dupNext = 0;
     C.fire(s, P, foe, Math.max(0.2, cur.end - rt));
     if (dup){ P.castMul *= dup; P.skMul *= dup; C.fire(s, P, foe, Math.max(0.2, cur.end - rt)); popS(s, P.x, P.y - P.R - 38, "🔁"); }
-    if (C.type !== "curse") V.played++; P.castMul = 1; P.skMul = 1; cur.done2 = true;
+    if (C.type !== "curse" && C.type !== "status") V.played++; v2OnCardPlayed(s, C); P.castMul = 1; P.skMul = 1; cur.done2 = true;
     if (C.type === "atk" && !cur.id.startsWith("echo")) V.lastAtk = cur.id;
     popS(s, P.x, P.y - P.R - 22, C.icon + C.name);
   }
@@ -3386,8 +3390,9 @@ function v2Tick(s){
     for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; if (!ev.fizzled){ e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast" }); } } }
   if (rt >= rd.T){ rd.over = true; P.focus = false; for (const E of rd.en) E.ball.focus = false;
     for (const c of rd.plan){ if (c.id === "_blank") continue; const C = CD(c.id); if (C.type === "power") continue; (C.exhaust ? V.exh : V.disc).push(c.id); }   // 파워·소멸 카드는 이번 전투에서 사라짐
+    if (V.unused){ const nb = V.unused.filter(id => id === "burnc").length; if (nb){ const d = nb * (V.burnUp ? 4 : 2); hurt(s, P, null, d); popS(s, P.x, P.y - P.R - 30, `🔥화상 -${d}`); } }   // (v2.22) 화상: 손에 남으면 피해
     if (V.unused){ for (const id of V.unused){ const C = CD(id); if (C.ethereal) V.exh.push(id); else if (C.retain || C.must || V.keepUnused) (V.kept = V.kept || []).push(id); else V.disc.push(id); } V.unused = null; }   // 안 올린 카드: 휘발성 → 소멸, 보존 → 다음 라운드, 나머지 → 버린 더미
-    for (const b of s.balls){ if (b.vulnR > 0) b.vulnR--; if (b.weakR > 0) b.weakR--; }   // 취약·약화는 라운드 단위
+    for (const b of s.balls) for (const k of ["vulnR", "weakR", "frailR", "entangleR"]) if (b[k] > 0){ if (b[k + "F"]) b[k + "F"] = 0; else b[k]--; }   // 취약·약화는 라운드 단위
     V.keepUnused = false;
     s.mines = s.mines.filter(m => !m.v2);   // 지뢰는 이번 패턴 동안만
     for (const b of s.balls){ b.shieldHp = 0; b.shieldT = 0; }   // 보호막은 패턴 안에서만
@@ -3438,7 +3443,7 @@ startBattle = function(){
 };
 // 적 행동 종류(색으로만 구분): 공격 빨강 / 스킬 파랑 / 파워 보라
 const ENEMY_POWER = ["ritual", "atk", "accel"], ENEMY_ATK_EXTRA = ["quake", "charge"];
-const actType = sk => ENEMY_POWER.includes(sk) ? "power" : (SKILL[sk] && SKILL[sk].g === "공격") || ENEMY_ATK_EXTRA.includes(sk) ? "atk" : "skill";
+const actType = sk => SKILL[sk] && SKILL[sk].v2 ? SKILL[sk].v2.type : ENEMY_POWER.includes(sk) ? "power" : (SKILL[sk] && SKILL[sk].g === "공격") || ENEMY_ATK_EXTRA.includes(sk) ? "atk" : "skill";
 // (v2.21) 시간 예산: 라운드마다 쓸 수 있는 내 시간(기본 7초) 안에서, 카드를 타임라인 원하는 위치(0.5초 단위)에 끌어다 놓음. 빈 곳은 관성으로 움직임
 const SNAP = 0.5, snapT = t => Math.round(t / SNAP) * SNAP;
 function v2Placed(s){ const V = s.v2; return V.placed.map((p, k) => ({ k, hi: p.hi, id: V.hand[p.hi], start: p.t, end: p.t + p.d, d: p.d })).sort((a, b) => a.start - b.start); }
@@ -3452,7 +3457,7 @@ function renderPlan(){
   const gapAt = (t, ex) => { let end = L; for (const [k, p] of V.placed.entries()){ if (k === ex) continue; if (p.t >= t - 1e-6 && p.t < end) end = p.t; } return end - t; };
   const freeAt = (t, d, ex) => t >= -1e-6 && t + d <= L + 1e-6 && V.placed.every((p, k) => k === ex || t + d <= p.t + 1e-6 || t >= p.t + p.d - 1e-6);
   const durFor = (hi, t, ex) => { const C = CD(V.hand[hi]); if (!C.x) return C.cast; return Math.floor(Math.min(B - usedEx(ex), gapAt(t, ex)) / SNAP + 1e-6) * SNAP; };   // X초 카드: 남은 내 시간 전부(다음 카드 전까지)
-  const canAt = (hi, t, ex) => { const d = durFor(hi, t, ex); return d >= SNAP - 1e-6 && freeAt(t, d, ex) && usedEx(ex) + d <= B + 1e-6 ? d : 0; };
+  const canAt = (hi, t, ex) => { if (v2Blocked(s, V.hand[hi])) return 0; const d = durFor(hi, t, ex); return d >= SNAP - 1e-6 && freeAt(t, d, ex) && usedEx(ex) + d <= B + 1e-6 ? d : 0; };
   const firstFit = (hi, ex) => { for (let t = 0; t <= L - SNAP + 1e-6; t += SNAP){ const d = canAt(hi, t, ex); if (d) return { t, d }; } return null; };
   const placedIdx = new Set(V.placed.map(p => p.hi));
   const tl = v2Placed(s);
@@ -3504,7 +3509,7 @@ function renderPlan(){
         if (at){ if (ex >= 0) V.placed[ex] = { hi, t: at.t, d: at.d }; else V.placed.push({ hi, t: at.t, d: at.d }); } else if (ex < 0) setInfo("⏱ 거기엔 못 놓아요 — 다른 카드와 겹치거나, 패턴 밖이거나, 내 시간이 모자라요");
         renderPlan(); } }; };
   panel.querySelectorAll(".hcard").forEach(el => { const hi = +el.dataset.hi;
-    press(el, () => { if (placedIdx.has(hi)) return; const f = firstFit(hi, -1); if (!f){ setInfo(`⏱ 놓을 자리가 없어요 (남은 내 시간 ${+left.toFixed(1)}초)`); return; } V.placed.push({ hi, t: f.t, d: f.d }); renderPlan(); },
+    press(el, () => { if (placedIdx.has(hi)) return; const f = firstFit(hi, -1); if (!f){ const bl = v2Blocked(s, V.hand[hi]); setInfo(bl ? bl : `⏱ 놓을 자리가 없어요 (남은 내 시간 ${+left.toFixed(1)}초)`); return; } V.placed.push({ hi, t: f.t, d: f.d }); renderPlan(); },
       () => showInfo(V.hand[hi]), placedIdx.has(hi) ? null : dragger(hi, -1, el)); });
   panel.querySelectorAll(".tlcard").forEach(el => { const k = +el.dataset.k;
     press(el, () => { V.placed.splice(k, 1); renderPlan(); }, () => showInfo(V.hand[V.placed[k].hi]), dragger(V.placed[k].hi, k, el)); });
@@ -3548,6 +3553,17 @@ const V2_ST = [   // [아이콘, 이름, 값(없으면 null), 설명]
   (b, s) => Math.abs(b.atkBonus || 0) > 0.001 ? ["💪", "힘", (b.atkBonus > 0 ? "+" : "") + +(b.atkBonus * 10).toFixed(1), "힘 1당 주는 공격 피해 +10%"] : null,
   (b, s) => b.vulnR > 0 ? ["💔", "취약", b.vulnR + "R", "받는 공격 피해 +50%. 남은 라운드 수(이번 라운드 포함)만큼 지속"] : null,
   (b, s) => b.weakR > 0 ? ["🥀", "약화", b.weakR + "R", "주는 공격 피해 -25%. 남은 라운드 수(이번 라운드 포함)만큼 지속"] : null,
+  (b, s) => b.frailR > 0 ? ["🫥", "허약", b.frailR + "R", "얻는 보호막 -25%"] : null,
+  (b, s) => b.entangleR > 0 ? ["🕸", "속박", b.entangleR + "R", "공격 카드를 올릴 수 없음"] : null,
+  (b, s) => b.curl ? ["🐚", "몸 말기", fmt(b.curl), "처음 피해를 입으면 보호막 (1번)"] : null,
+  (b, s) => b.angry ? ["😡", "분노", "+" + b.angry, "맞을 때마다 힘 증가"] : null,
+  (b, s) => b.enrage ? ["😠", "격분", "+" + b.enrage, "내가 스킬 카드를 낼 때마다 힘 증가"] : null,
+  (b, s) => b.asleep > 0 ? ["💤", "잠", b.asleep + "R", "맞으면 깨어나고 그 다음 라운드는 기절"] : null,
+  (b, s) => b.stunNext ? ["💫", "기절", "", "다음 라운드에 행동 못 함"] : null,
+  (b, s) => b.v2thorns ? ["🌵", "가시", fmt(b.v2thorns), "때리면 나도 피해를 입음"] : null,
+  (b, s) => b.mode ? ["⚙", b.mode === "def" ? "방어 모드" : "공격 모드", b.mode === "atk" ? `${fmt(b.modeDmg)}/${b.modeThr}` : "", "공격 모드에서 이만큼 피해를 받으면 방어 모드로"] : null,
+  (b, s) => b.splitReady ? ["🟢", "분열 준비", "", "다음 라운드에 둘로 갈라짐"] : null,
+  (b, s) => b.stolen ? ["💰", "훔친 골드", b.stolen, "쓰러뜨리면 돌려받음 (도망가면 못 받음)"] : null,
   (b, s) => b.flatAtk ? ["🔪", "날 세우기", "+" + b.flatAtk, "공격 1번마다 피해 +"] : null,
   (b, s) => b.dex ? ["🛡", "방패술", "+" + b.dex, "보호막을 얻을 때마다 +"] : null,
   (b, s) => b.metal ? ["🔩", "금속화", fmt(b.metal), "라운드가 시작될 때마다 보호막"] : null,
@@ -3734,7 +3750,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.21";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.22";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -3879,6 +3895,204 @@ function v2OpenCardAdder(){
 { const st = document.createElement("style"); st.textContent = `.caTop{position:sticky;top:0;background:#151a2e;padding:4px 0 6px;z-index:2}.caGrid{display:flex;flex-wrap:wrap;gap:5px}
   .caChip{border-radius:8px;border:1px solid #444;padding:5px 8px;font-size:12px;color:#fff;background:#232a4a;display:flex;gap:4px;align-items:center}.caChip small{color:#aab;font-size:10px}
   .caChip.atk{border-color:#c84a4a;background:#3a1a1a}.caChip.skill{border-color:#3a8ac8;background:#152a40}.caChip.power{border-color:#a060e8;background:#2a1a40}.caChip.curse{border-color:#9a5ab0;background:#2a1834}`; document.head.appendChild(st); }
+
+// ===================== (v2.22) 1막 몬스터 풀 (슬더스식: 층 비례 성장 없이 정해진 몬스터·패턴) =====================
+CARD_TYPE.status = { name: "상태", col: "#777" };
+Object.assign(CARDS, {
+  slimed: { name: "점액", icon: "🟩", type: "status", cast: 1, focus: 0, rar: 0, must: true, exhaust: true, desc: "〔필수·소멸〕 아무 일도 안 함 (적이 넣은 상태 카드)", fire: () => {} },
+  dazed:  { name: "어지러움", icon: "💫", type: "status", cast: 1, focus: 0, rar: 0, unplayable: true, ethereal: true, desc: "〔사용불가·휘발성〕 손패 칸만 차지, 라운드 끝에 소멸", fire: () => {} },
+  burnc:  { name: "화상", icon: "🔥", type: "status", cast: 1, focus: 0, rar: 0, unplayable: true, desc: "〔사용불가〕 라운드 끝에 손패에 있으면 피해 2 (강화되면 4)", fire: () => {} }
+});
+function v2AddCards(s, id, n, where){ const V = s.v2; for (let i = 0; i < n; i++){ if (where === "draw") V.draw.splice(Math.floor(s.rng() * (V.draw.length + 1)), 0, id); else V.disc.push(id); }
+  const P = s.balls[0]; popS(s, P.x, P.y - P.R - 34, `${CD(id).icon}${CD(id).name} +${n}`); }
+function v2CancelEvs(s, e){ if (!s.rd) return; for (const E of s.rd.en) if (E.ball === e) for (const v of E.evs) if (!v.done){ v.done = true; v.fizzled = true; } }
+const nowR = s => s.rd ? (s.tick - s.rd.t0) / 60 : 0;
+
+// ---- 적 행동 만들기: SKILL·EFF에 등록하고 id를 돌려줌 ----
+let MACT_N = 0;
+function mAct(spec){   // spec: { name, kind: "hit"|"shot"|"sure"|"none", d, n, dyn(s,me,P), focus, type: "atk"|"skill"|"power", fx(s,me,P) }
+  const id = "m" + (++MACT_N), kind = spec.kind || "none", type = spec.type || (spec.d != null || spec.dyn ? "atk" : "skill");
+  SKILL[id] = { label: spec.name, desc: spec.desc || "", g: type === "atk" ? "공격" : "보조", rar: 0, enemy: true, attrs: ["normal"], v2: { kind, d: spec.d, n: spec.n || 1, dyn: spec.dyn, focus: spec.focus, type } };
+  if (type === "power") ENEMY_POWER.push(id);
+  EFF[id] = (s, me, foe) => { const P = s.balls[0]; if (P.dead) return; const base = spec.dyn ? spec.dyn(s, me, P) : spec.d;
+    if (base != null){
+      if (kind === "hit"){ const a = Math.atan2(P.y - me.y, P.x - me.x); me.hx = Math.cos(a); me.hy = Math.sin(a); me.dashT = T(0.7); me.dashMult = 3.2; s.dashes.push({ owner: me.id, sk: "dash", t: T(0.7), dmg: base * (1 + me.atkBonus), hit: [] }); }
+      else if (kind === "shot") mkShot(s, me, P, { eff: "shoot", lvMul: base / 17, act: "cast" }, 17, 10, 160, 0.05, 8, "#ff9aa5");
+      else { const n = spec.n || 1; for (let i = 0; i < n; i++) s.v2.timed.push({ at: s.tick + i * 12, fn: () => { if (me.dead || P.dead) return; s.bolts.push({ x1: me.x, y1: me.y, x2: P.x, y2: P.y, t: 0, col: "#ff8080" }); hurt(s, P, me, base * (1 + me.atkBonus)); if (spec.onHit) spec.onHit(s, me, P); } }); }
+    }
+    if (spec.fx) spec.fx(s, me, P);
+    popS(s, me.x, me.y - me.R - 22, spec.name); };
+  return id;
+}
+const MA = {   // 자주 쓰는 행동
+  hit: (name, d, extra) => mAct({ name, kind: "hit", d, ...(extra || {}) }),
+  shot: (name, d, extra) => mAct({ name, kind: "shot", d, ...(extra || {}) }),
+  sure: (name, d, n, extra) => mAct({ name, kind: "sure", d, n, ...(extra || {}) }),
+  fx: (name, fx, type, extra) => mAct({ name, fx, type: type || "skill", ...(extra || {}) })
+};
+const fxBlock = n => (s, me) => v2Shield(s, me, n);
+const fxStr = n => (s, me) => v2Str(s, me, n);
+const fxDeb = (key, n) => (s, me, P) => v2Debuff(s, P, key, n);
+const fxCards = (id, n, where) => s => v2AddCards(s, id, n, where);
+const fxAll = (...fs) => (s, me, P) => fs.forEach(f => f(s, me, P));
+// 순서 규칙
+const pickW = (s, ws) => { const tot = ws.reduce((a, w) => a + w, 0); let x = s.rng() * tot; for (let i = 0; i < ws.length; i++){ x -= ws[i]; if (x <= 0) return i; } return ws.length - 1; };
+const O = {
+  cycle: (start) => (e, s, m) => ((start || 0) + m.n) % MON[e.cfg.mon].pats.length,
+  rand: (opt) => (e, s, m) => { const o = opt || {}, n = MON[e.cfg.mon].pats.length; if (o.first != null && m.n === 0) return o.first;
+    const h = m.hist, ws = Array.from({ length: n }, (_, i) => { let w = o.w ? o.w[i] : 1; if (o.skip && o.skip.includes(i)) w = 0;
+      const mx = o.max || 2; if (h.length >= mx && h.slice(-mx).every(x => x === i)) w = 0;   // 같은 패턴 mx번 연속 금지
+      if (o.once && o.once.includes(i) && h.includes(i)) w = 0; return w; });
+    return ws.some(w => w > 0) ? pickW(s, ws) : 0; }
+};
+const P10 = (...ev) => ({ len: 10, ev }), P8 = (...ev) => ({ len: 8, ev }), P12 = (...ev) => ({ len: 12, ev });
+
+// ---- 1막 몬스터 정의 ----
+const MON = {
+  jaw:    { name: "턱벌레", icon: "🪱", art: "rusher", color: "#b07a50", hp: 28, R: 22, order: O.rand({ first: 0, max: 1 }),
+    pats: [P10([4, MA.hit("물기", 11)]), P10([3, MA.hit("휘두르기", 7)], [7, MA.fx("웅크림", fxBlock(5))]), P10([5, MA.fx("포효", fxAll(fxStr(3), fxBlock(6)), "power")])] },
+  cultist:{ name: "광신도", icon: "🕯", art: "cultist", color: "#8a6a3a", hp: 34, R: 22, order: (e, s, m) => m.n === 0 ? 0 : 1,
+    pats: [P10([3, MA.fx("의식", (s, me) => { me.ritualN = (me.ritualN || 0) + 3; }, "power")], [7, MA.hit("어둠 찌르기", 6)]), P10([5, MA.hit("어둠 찌르기", 6)])] },
+  louseR: { name: "빨간 이", icon: "🐜", art: "berserk", color: "#d04a4a", hp: [10, 12], R: 16, order: O.rand({ max: 2 }), init: (e, s) => { e.biteD = 5 + Math.floor(s.rng() * 3); e.curl = 5; },
+    pats: [P8([4, mAct({ name: "물기", kind: "hit", dyn: (s, me) => me.biteD })]), P8([4, MA.fx("성장", fxStr(3), "power")])] },
+  louseG: { name: "초록 이", icon: "🐜", art: "venom", color: "#4aa04a", hp: [11, 13], R: 16, order: O.rand({ max: 2 }), init: (e, s) => { e.biteD = 5 + Math.floor(s.rng() * 3); e.curl = 5; },
+    pats: [P8([4, mAct({ name: "물기", kind: "hit", dyn: (s, me) => me.biteD })]), P8([4, MA.fx("거미줄", fxDeb("weakR", 2))])] },
+  acidM:  { name: "산성 슬라임(중)", icon: "🟢", art: "slime", color: "#5ad07a", hp: 20, R: 20, order: O.rand(),
+    pats: [P10([4, MA.shot("부식 침", 7, { fx: fxCards("slimed", 1) })]), P10([4, MA.hit("몸통", 10)]), P10([4, MA.fx("핥기", fxDeb("weakR", 1))])] },
+  spikeM: { name: "가시 슬라임(중)", icon: "🟣", art: "slime", color: "#b07ad0", hp: 20, R: 20, order: O.rand(),
+    pats: [P10([4, MA.hit("불꽃 몸통", 8, { fx: fxCards("slimed", 1) })]), P10([4, MA.fx("핥기", fxDeb("frailR", 1))])] },
+  acidS:  { name: "산성 슬라임(소)", icon: "🟢", art: "slime", color: "#7ae09a", hp: 7, R: 14, order: O.cycle(),
+    pats: [P8([4, MA.hit("몸통", 3)]), P8([4, MA.fx("핥기", fxDeb("weakR", 1))])] },
+  spikeS: { name: "가시 슬라임(소)", icon: "🟣", art: "slime", color: "#c09ae0", hp: 8, R: 14, order: O.cycle(),
+    pats: [P8([4, MA.hit("몸통", 5)])] },
+  acidL:  { name: "산성 슬라임(대)", icon: "🟢", art: "slime", color: "#3ab05a", hp: 43, R: 28, order: O.rand(), split: ["acidM", "acidM"],
+    pats: [P12([5, MA.shot("부식 침", 11, { fx: fxCards("slimed", 2) })]), P12([5, MA.hit("몸통", 16)]), P12([5, MA.fx("핥기", fxDeb("weakR", 2))])] },
+  spikeL: { name: "가시 슬라임(대)", icon: "🟣", art: "slime", color: "#9a5ac0", hp: 43, R: 28, order: O.rand(), split: ["spikeM", "spikeM"],
+    pats: [P12([5, MA.hit("불꽃 몸통", 16, { fx: fxCards("slimed", 2) })]), P12([5, MA.fx("핥기", fxDeb("frailR", 2))])] },
+  slaverB:{ name: "파란 노예상", icon: "⛓", art: "duelist", color: "#4a7ad0", hp: 31, R: 22, order: O.rand({ max: 2 }),
+    pats: [P10([4, MA.hit("찌르기", 12)]), P10([4, MA.hit("할퀴기", 7, { fx: fxDeb("weakR", 1) })])] },
+  slaverR:{ name: "빨간 노예상", icon: "⛓", art: "duelist", color: "#d04a4a", hp: 31, R: 22, order: O.rand({ first: 0, once: [2] }),
+    pats: [P10([4, MA.hit("찌르기", 13)]), P10([4, MA.hit("긁기", 8, { fx: fxDeb("vulnR", 1) })]), P10([3, MA.fx("그물", (s, me, P) => { P.entangleR = 2; popS(s, P.x, P.y - P.R - 30, "🕸속박"); })], [7, MA.hit("찌르기", 13)])] },
+  fungi:  { name: "버섯 짐승", icon: "🍄", art: "doom", color: "#c06a8a", hp: 16, R: 20, order: O.rand({ max: 2 }), onDeath: (s, e) => v2Debuff(s, s.balls[0], "vulnR", 2),
+    pats: [P10([4, MA.hit("물기", 6)]), P10([4, MA.fx("성장", fxStr(3), "power")])] },
+  looter: { name: "약탈자", icon: "💰", art: "archer", color: "#8a7a4a", hp: 30, R: 22, order: (e, s, m) => [0, 0, 1, 2][Math.min(3, m.n)],
+    pats: [P10([4, MA.sure("강탈", 10, 1, { onHit: (s, me) => v2Steal(s, me, 15) })]), P10([4, MA.hit("돌진", 12)]), P10([2, MA.fx("연막", fxBlock(6))], [9, MA.fx("도망", (s, me) => v2Escape(s, me))])] },
+  gFat:   { name: "뚱보 그렘린", icon: "👺", art: "tank", color: "#a08a5a", hp: 9, R: 18, order: O.cycle(), pats: [P8([4, MA.hit("내려치기", 4, { fx: fxDeb("weakR", 1) })])] },
+  gSneak: { name: "교활한 그렘린", icon: "👺", art: "duelist", color: "#6a8a5a", hp: 8, R: 16, order: O.cycle(), pats: [P8([4, MA.hit("찌르기", 9)])] },
+  gMad:   { name: "미친 그렘린", icon: "👺", art: "berserk", color: "#c05a3a", hp: 14, R: 18, order: O.cycle(), init: e => { e.angry = 1; }, pats: [P8([4, MA.hit("할퀴기", 4)])] },
+  gShield:{ name: "방패 그렘린", icon: "👺", art: "paladin", color: "#7a8aa0", hp: 9, R: 18, order: (e, s) => s.balls.some(b => b.id !== 0 && b !== e && !b.dead) ? 0 : 1,
+    pats: [P8([4, MA.fx("보호", (s, me) => { const o = s.balls.filter(b => b.id !== 0 && b !== me && !b.dead); if (o.length) v2Shield(s, o[Math.floor(s.rng() * o.length)], 7); })]), P8([4, MA.hit("방패 치기", 6)])] },
+  gWiz:   { name: "그렘린 마법사", icon: "👺", art: "warlock", color: "#6a4aa0", hp: 15, R: 18, order: (e, s, m) => { if ((m.c || 0) >= 2){ m.c = 0; return 1; } m.c = (m.c || 0) + 1; return 0; },
+    pats: [P8([4, MA.fx("충전", () => {})]), P8([5, MA.sure("궁극 화염", 25, 1, { focus: 2 })])] },
+  // ---- 정예 ----
+  nob:    { name: "그렘린 대장", icon: "👹", art: "berserk", color: "#b03a3a", hp: 54, R: 26, elite: true, order: O.rand({ first: 0, w: [0, 2, 1], max: 2 }),
+    pats: [P10([3, MA.fx("고함", (s, me) => { me.enrage = (me.enrage || 0) + 2; }, "power")]), P10([4, MA.hit("돌진", 14)]), P10([4, MA.hit("두개골 강타", 6, { fx: fxDeb("vulnR", 2) })])] },
+  laga:   { name: "라가불린", icon: "🐢", art: "tank", color: "#5a7a6a", hp: 72, R: 28, elite: true, order: O.cycle(), init: e => { e.asleep = 3; e.metal = 8; e.spd0 = e.spd; e.spd = 0; },
+    pats: [P10([4, MA.hit("내려찍기", 18)]), P10([4, MA.hit("내려찍기", 18)]), P10([5, MA.fx("영혼 흡수", (s, me, P) => { v2Str(s, P, -1); P.dex = (P.dex || 0) - 1; }, "power")])] },
+  sentry: { name: "보초기", icon: "🗼", art: "clock", color: "#c8b080", hp: 26, R: 20, elite: true, order: (e, s, m) => ((e.cfg.slot === 1 ? 1 : 0) + m.n) % 2, init: e => { e.artifact = 1; },
+    pats: [P10([4, MA.fx("볼트", fxCards("dazed", 2))]), P10([4, MA.shot("빔", 9)])] },
+  // ---- 보스 ----
+  slimeK: { name: "슬라임 왕", icon: "👑", art: "slime", color: "#4ac06a", hp: 91, R: 34, boss: true, order: O.cycle(), split: ["acidL", "spikeL"],
+    pats: [P10([4, MA.fx("점액 뿌리기", fxCards("slimed", 3))]), P10([5, MA.fx("준비", () => {})]), P10([5, MA.hit("내려찍기", 35, { focus: 2 })])] },
+  guardian:{ name: "수호자", icon: "🛡", art: "paladin", color: "#8a9ab0", hp: 156, R: 32, boss: true, init: e => { e.mode = "atk"; e.modeDmg = 0; e.modeThr = 20; },
+    order: (e, s, m) => { if (e.mode === "def"){ m.dn = (m.dn || 0) + 1; if (m.dn === 1) return 4; if (m.dn === 2) return 5; e.mode = "atk"; e.v2thorns = 0; e.modeDmg = 0; m.an = 0; }
+      const i = (m.an || 0) % 4; m.an = (m.an || 0) + 1; return i; },
+    pats: [P10([3, MA.fx("충전", fxBlock(9))]), P10([5, MA.hit("강타", 32, { focus: 2 })]), P10([4, MA.fx("증기", fxAll(fxDeb("weakR", 2), fxDeb("vulnR", 2)))]), P10([4, MA.sure("회오리", 5, 4)]),
+      P10([4, MA.hit("굴러 박기", 9)]), P10([4, MA.sure("연타", 8, 2)])] },
+  hexa:   { name: "육각령", icon: "👻", art: "pyro", color: "#6ad0ff", hp: 163, R: 32, boss: true, order: (e, s, m) => m.n === 0 ? 0 : m.n === 1 ? 1 : 2 + (m.n - 2) % 7,
+    pats: [P10([5, MA.fx("활성", () => {})]), P10([5, mAct({ name: "분할", kind: "sure", n: 6, focus: 2, dyn: (s, me, P) => Math.floor(P.hp / 14) + 1 })]),
+      P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]), P10([4, MA.sure("몸통", 5, 2)]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
+      P10([4, MA.fx("강화", fxAll(fxStr(2), fxBlock(12)), "power")]), P10([4, MA.sure("몸통", 5, 2)]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
+      P10([5, MA.sure("지옥불", 2, 6, { fx: s => { s.v2.burnUp = true; } })])] }
+};
+function v2Steal(s, me, n){ const r = runState, a = Math.min(n, r.gold || 0); if (a <= 0) return; r.gold -= a; me.stolen = (me.stolen || 0) + a; popS(s, me.x, me.y - me.R - 30, `💰-${a}`); updateHud(); }
+function v2Escape(s, me){ me.escaped = true; me.dead = true; me.hp = 0; s.booms.push({ x: me.x, y: me.y, r: 40, t: 0, col: "#aaa" }); popS(s, me.x, me.y - me.R - 14, "💨도망!"); }
+// 조합 (가중치)
+const ENC1 = {
+  easy: [[2, () => ["jaw"]], [2, () => ["cultist"]], [2, r => [r.rng() < 0.5 ? "louseR" : "louseG", r.rng() < 0.5 ? "louseR" : "louseG"]], [2, r => r.rng() < 0.5 ? ["spikeM", "acidS"] : ["acidM", "spikeS"]]],
+  hard: [[2, r => [r.rng() < 0.5 ? "acidL" : "spikeL"]], [1, () => ["spikeS", "spikeS", "spikeS", "acidS", "acidS"]], [2, () => ["slaverB"]], [1, () => ["slaverR"]],
+    [2, r => [0, 1, 2].map(() => r.rng() < 0.5 ? "louseR" : "louseG")], [2, () => ["fungi", "fungi"]], [2, () => ["looter"]],
+    [1, r => { const pool = ["gFat", "gFat", "gSneak", "gSneak", "gMad", "gMad", "gShield", "gWiz"]; const out = []; while (out.length < 4) out.push(pool.splice(Math.floor(r.rng() * pool.length), 1)[0]); return out; }],
+    [1.5, r => [[r.rng() < 0.5 ? "louseR" : "louseG", "acidM", "spikeM"][Math.floor(r.rng() * 3)], ["slaverB", "slaverR", "cultist", "looter"][Math.floor(r.rng() * 4)]]],
+    [1.5, r => [r.rng() < 0.5 ? "fungi" : "jaw", [r.rng() < 0.5 ? "louseR" : "louseG", "acidM", "spikeM"][Math.floor(r.rng() * 3)]]]],
+  elite: [[1, () => ["nob"]], [1, () => ["laga"]], [1, () => ["sentry", "sentry", "sentry"]]],
+  boss: [[1, () => ["slimeK"]], [1, () => ["guardian"]], [1, () => ["hexa"]]]
+};
+function mkMon(id, r, slot){ const M = MON[id], hp = Array.isArray(M.hp) ? M.hp[0] + Math.floor(r.rng() * (M.hp[1] - M.hp[0] + 1)) : M.hp;
+  return { mon: id, tid: M.art, slot, hp, maxHp: hp, atk: 12, def: 0, minI: MIN_INTERVAL, name: M.name, icon: M.icon, color: M.color, ring: M.boss ? "#d08aff" : M.elite ? "#ffb040" : "#fff",
+    tag: M.boss ? "boss" : M.elite ? "elite" : "normal", R: M.R || 22, abilities: [], spikes: 0, attrs: [], weak: [], resist: [], v2effs: [] }; }
+function genAct1(r, kind){
+  const pickE = (list, bad) => { const ok = list.map((x, i) => [x, i]).filter(([x, i]) => !bad.includes(i)); const tot = ok.reduce((a, [x]) => a + x[0], 0); let v = r.rng() * tot; for (const [x, i] of ok){ v -= x[0]; if (v <= 0) return [x, i]; } return ok[ok.length - 1]; };
+  if (kind === "boss"){ if (r.act1Boss == null) r.act1Boss = Math.floor(r.rng() * 3); return ENC1.boss[r.act1Boss][1](r).map((id, i) => mkMon(id, r, i)); }
+  if (kind === "elite"){ const [x, i] = pickE(ENC1.elite, r.lastElite1 != null ? [r.lastElite1] : []); r.lastElite1 = i; return x[1](r).map((id, k) => mkMon(id, r, k)); }
+  r.n1 = (r.n1 || 0) + 1; const pool = r.n1 <= 3 ? "easy" : "hard", hist = (r.hist1 || []).filter(h => h[0] === pool).slice(-2).map(h => h[1]);
+  const [x, i] = pickE(ENC1[pool], hist); r.hist1 = (r.hist1 || []).concat([[pool, i]]).slice(-4); return x[1](r).map((id, k) => mkMon(id, r, k));
+}
+const genEncounter0 = genEncounter;
+genEncounter = function(r, kind){ if (r.v2 && actOf(r.floor) === 1) return genAct1(r, kind); return genEncounter0(r, kind); };
+
+// ---- 전투 연결 ----
+function v2MonInit(s, e){ const M = e.cfg && MON[e.cfg.mon]; if (!M || e.monInit) return; e.monInit = true; e.mem = { n: 0, hist: [] }; if (M.init) M.init(e, s); }
+const startFightV2m = startFightV2;
+startFightV2 = function(r){ const s = startFightV2m(r); s.balls.slice(1).forEach(e => v2MonInit(s, e)); return s; };
+function v2MonPattern(s, e){   // 이번 라운드 패턴 고르기 (잠·기절이면 빈 패턴)
+  const M = MON[e.cfg.mon], m = e.mem;
+  if (e.stunNext){ e.stunNext = false; popS(s, e.x, e.y - e.R - 26, "💫기절"); return { len: 10, ev: [] }; }   // 잠에서 맞아 깬 라운드 다음: 기절
+  if (e.asleep > 0){ e.asleep--; if (e.asleep === 0) e.wakeNext = true; return { len: 10, ev: [] }; }   // 잠: asleep 라운드 동안 행동 없음
+  if (e.wakeNext){ e.wakeNext = false; v2Wake(s, e, false); }
+  const pi = M.order(e, s, m); m.hist.push(pi); m.n++; return M.pats[pi];
+}
+function v2Wake(s, e, hit){ e.asleep = 0; e.wakeNext = false; e.metal = 0; e.spd = e.spd0 || 3.5; popS(s, e.x, e.y - e.R - 26, "❗깨어남"); if (hit){ v2CancelEvs(s, e); e.stunNext = true; } }
+function v2Split(s, e){   // 분열: 남은 체력을 각자 가진 둘로
+  const M = MON[e.cfg.mon], h = Math.max(1, Math.round(e.hp)), [a, b] = M.split, r = runState;
+  const mk = id => { const c = mkMon(id, r, 0); c.hp = c.maxHp = h; return c; };
+  const ca = mk(a); Object.assign(e, { cfg: { ...e.cfg, ...ca }, hp: h, maxHp: h, R: ca.R, name: ca.name, color: ca.color, monInit: false, ring: ca.ring, shieldHp: 0 }); e.cfg.mon = a; v2MonInit(s, e);
+  const nb = newBall(s.balls.length, clamp(e.x + 30, 20, W - 20), e.y, s.rng() * 6.28, mk(b)); s.balls.push(nb); v2MonInit(s, nb);
+  s.booms.push({ x: e.x, y: e.y, r: 50, t: 0, col: "#5ad07a" }); popS(s, e.x, e.y - e.R - 26, "🟢분열!");
+}
+// 맞을 때: 웅크리기·분노(맞으면 힘)·잠 깨기·수호자 모드·가시
+const hurtV2 = hurt;
+hurt = function(s, tgt, src, amount, sk){
+  const hp0 = tgt.hp; const res = hurtV2(s, tgt, src, amount, sk); const dealt = Math.max(0, hp0 - tgt.hp);
+  if (s.v2 && tgt.id !== 0 && src && src.id === 0 && !tgt.dead){
+    if (tgt.curl && dealt > 0){ const c = tgt.curl; tgt.curl = 0; v2Shield(s, tgt, c); popS(s, tgt.x, tgt.y - tgt.R - 30, "🐚웅크리기"); }
+    if (tgt.angry && dealt > 0) v2Str(s, tgt, tgt.angry);
+    if (tgt.asleep > 0 && dealt > 0) v2Wake(s, tgt, true);
+    if (tgt.mode === "atk" && dealt > 0){ tgt.modeDmg += dealt; if (tgt.modeDmg >= tgt.modeThr){ tgt.mode = "def"; tgt.mem.dn = 0; tgt.modeThr += 10; tgt.v2thorns = 4; v2Shield(s, tgt, 20); v2CancelEvs(s, tgt); popS(s, tgt.x, tgt.y - tgt.R - 30, "🛡방어 모드!"); } }
+    const M = tgt.cfg && MON[tgt.cfg.mon]; if (M && M.split && !tgt.splitReady && tgt.hp > 0 && tgt.hp <= tgt.maxHp / 2){ tgt.splitReady = true; v2CancelEvs(s, tgt); popS(s, tgt.x, tgt.y - tgt.R - 30, "🟢분열 준비"); }
+    if (tgt.v2thorns && !src.dead && sk !== "thorn"){ src.hp -= tgt.v2thorns; popS(s, src.x, src.y - src.R - 8, "🌵" + tgt.v2thorns); }
+  }
+  return res;
+};
+// 라운드 준비 연결: 패턴 고르기 전에 분열, 적 의식(라운드마다 힘)
+const v2PrepRoundM = v2PrepRound;
+v2PrepRound = function(s){
+  for (const e of s.balls.slice(1)) if (!e.dead && e.splitReady && e.cfg && MON[e.cfg.mon] && MON[e.cfg.mon].split){ e.splitReady = false; v2Split(s, e); }
+  for (const e of s.balls.slice(1)) if (!e.dead && e.ritualN && e.mem && e.mem.n > 0) v2Str(s, e, e.ritualN);
+  return v2PrepRoundM(s);
+};
+// 죽음·도망 처리 (매 틱)
+function v2MonTick(s){
+  const r = runState;
+  for (const e of s.balls.slice(1)) if (e.dead && !e.deathDone){ e.deathDone = true; const M = e.cfg && MON[e.cfg.mon];
+    if (!e.escaped){ if (e.stolen){ r.gold += e.stolen; popS(s, e.x, e.y - e.R - 30, `💰+${e.stolen}`); updateHud(); } if (M && M.onDeath) M.onDeath(s, e); } }
+}
+// 내가 카드를 낼 때(분노: 스킬)
+function v2OnCardPlayed(s, C){ if (C.type === "skill") for (const e of s.balls.slice(1)) if (!e.dead && e.enrage){ v2Str(s, e, e.enrage); popS(s, e.x, e.y - e.R - 30, "😠분노"); } }
+
+// ---- 🛠 몬스터 고르기 (1막) ----
+function v2OpenMonPicker(){ const r = runState; if (!r) return;
+  const groups = [["쉬운 풀", ENC1.easy], ["어려운 풀", ENC1.hard], ["정예", ENC1.elite], ["보스", ENC1.boss]];
+  const label = f => { const ids = f({ rng: () => 0.3 }); return ids.map(id => MON[id].icon + MON[id].name).join(" + "); };
+  openInfo("🛠 1막 몬스터 고르기", groups.map(([g, list], gi) => `<div class="sideh" style="margin-top:6px">${g}</div><div class="caGrid">${list.map((x, i) => `<button class="caChip" data-mg="${gi}" data-mi="${i}">${label(x[1])}</button>`).join("")}</div>`).join(""), el => {
+    el.querySelectorAll("[data-mg]").forEach(b => b.onclick = () => { const [, list] = groups[+b.dataset.mg], x = list[+b.dataset.mi];
+      r.enc = x[1](r).map((id, k) => mkMon(id, r, k)); r.encKind = MON[r.enc[0].mon].boss ? "boss" : MON[r.enc[0].mon].elite ? "elite" : "normal"; r.retry = 0; closeInfo(); state = null; renderPrep(); }); }); }
+{ const row = document.querySelector("#devbox .row"); if (row){ const b = document.createElement("button"); b.className = "dbg"; b.textContent = "🛠 1막 몬스터"; b.onclick = () => setTimeout(v2OpenMonPicker, 30); row.insertBefore(b, row.firstChild); } }
+function v2Blocked(s, id){ const C = CD(id); if (C.unplayable) return `${C.icon} ${C.name}: 사용할 수 없는 카드예요`; if (C.type === "atk" && s.balls[0].entangleR > 0) return "🕸 속박: 이번 라운드엔 공격 카드를 못 올려요"; return ""; }
+const stepMon = step;
+step = function(s){ stepMon(s); if (s.v2) v2MonTick(s); };
+const newRunMon = newRun;
+newRun = function(seed){ const r = newRunMon(seed); beginFloor(r, "normal"); return r; };
 
 { const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
 requestAnimationFrame(loop);
