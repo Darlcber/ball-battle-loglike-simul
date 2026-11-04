@@ -3076,7 +3076,7 @@ const CARD_TYPE = { atk: { name: "공격", col: "#c84a4a" }, skill: { name: "스
 // 보호막은 이번 패턴(라운드)이 끝날 때까지만
 function v2Shield(s, me, amt){ amt = Math.round((amt + (me.dex || 0)) * (me.skMul || 1)); if (amt <= 0) return; const rd = s.rd, rem = rd && !rd.over ? rd.T - (s.tick - rd.t0) / 60 : 5; me.shieldHp = Math.min(BIG, me.shieldHp + amt); me.shieldT = Math.max(me.shieldT, Math.ceil(rem * 60) + 1); popS(s, me.x, me.y - me.R - 22, "🛡+" + fmt(amt)); }
 // 빈 시간 = 이번 라운드에서 내 카드가 없는 시간 (공백 카드 + 끝에 남는 시간)
-function v2Blank(s){ const rd = s.rd; if (!rd) return 0; let b = 0, end = 0; for (const c of rd.plan){ if (c.id === "_blank") b += c.end - c.start; end = c.end; } return b + Math.max(0, rd.T - end); }
+function v2Blank(s){ const rd = s.rd; if (!rd) return 0; return Math.max(0, rd.T - rd.plan.reduce((a, c) => a + (c.end - c.start), 0)); }   // 빈 시간 = 카드가 없는 시간
 // X초 카드 길이: 패턴 끝까지 남은 시간 (계획 화면에서 계산해 둠)
 const v2XDur = () => (state && state.v2 && state.v2.xDur) || 2;
 // 순서 정보: 이 카드가 라운드 몇 번째인지, 첫·마지막인지(공백도 칸을 차지), 직전 카드, 앞서 낸 공격 수
@@ -3152,13 +3152,13 @@ const CARDS = {
   flash:   { name: "번뜩임", icon: "✴", type: "atk", cast: 1, focus: 0, rar: 1, ethereal: true, desc: "피해 5 (집중 없이 바로 달려들어 벰)", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 5, wab("stick")), 75) },
   patient: { name: "기다림의 칼", icon: "🕰", type: "atk", cast: 2, focus: 1, rar: 1, retain: true, desc: "피해 7", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 7, wab("stick")), 70) },
   pierceb: { name: "꿰뚫는 일격", icon: "🗡", type: "atk", cast: 2, focus: 1, rar: 1, desc: "피해 4 + 취약 1", fire: (s, me, foe) => { const f = nearFoe(s, me) || foe; if (!f) return; s.bolts.push({ x1: me.x, y1: me.y, x2: f.x, y2: f.y, t: 0, col: "#ff9ab0" }); hurt(s, f, me, pw(me, 4, wab("stick"))); v2Debuff(s, f, "vulnR", 1); } },
-  barrage: { name: "총공세", icon: "⏳", type: "atk", get cast(){ return v2XDur(); }, x: true, focus: 0.5, rar: 2, desc: "X초 카드: 패턴 끝까지 남은 시간을 전부 씀. 1초마다 가까운 적에게 피해 2", fire: (s, me, foe, dur, m = 1) => { const n = Math.max(1, Math.floor(dur + 0.01)); for (let i = 0; i < n; i++) s.v2.timed.push({ at: s.tick + 60 * i, fn: () => { const f = nearFoe(s, me); if (f){ s.bolts.push({ x1: me.x, y1: me.y, x2: f.x, y2: f.y, t: 0, col: "#ffd27a" }); hurt(s, f, me, pw(me, 2, wab("stick"))); } } }); popS(s, me.x, me.y - me.R - 30, `⏳×${n}`); } },
+  barrage: { name: "총공세", icon: "⏳", type: "atk", get cast(){ return v2XDur(); }, x: true, focus: 0.5, rar: 2, desc: "X초 카드: 남은 내 시간을 전부 씀(다음 카드 전까지). 1초마다 가까운 적에게 피해 2", fire: (s, me, foe, dur, m = 1) => { const n = Math.max(1, Math.floor(dur + 0.01)); for (let i = 0; i < n; i++) s.v2.timed.push({ at: s.tick + 60 * i, fn: () => { const f = nearFoe(s, me); if (f){ s.bolts.push({ x1: me.x, y1: me.y, x2: f.x, y2: f.y, t: 0, col: "#ffd27a" }); hurt(s, f, me, pw(me, 2, wab("stick"))); } } }); popS(s, me.x, me.y - me.R - 30, `⏳×${n}`); } },
   // ---- 스킬 ----
   expose:  { name: "약점 노출", icon: "💔", type: "skill", cast: 1, focus: 0.5, rar: 1, desc: "가까운 적 취약 2 (받는 공격 피해 +50%, 2라운드)", fire: (s, me, foe, dur, m = 1) => v2Debuff(s, nearFoe(s, me), "vulnR", rint(2, m)) },
   enfeeble:{ name: "무력화", icon: "🥀", type: "skill", cast: 1, focus: 0.5, rar: 1, desc: "가까운 적 약화 2 (주는 공격 피해 -25%, 2라운드)", fire: (s, me, foe, dur, m = 1) => v2Debuff(s, nearFoe(s, me), "weakR", rint(2, m)) },
   smoke:   { name: "연막", icon: "🌫", type: "skill", cast: 1.5, focus: 0, rar: 2, desc: "모든 적 약화 1", fire: (s, me, foe, dur, m = 1) => { for (const f of foesOf(s, me)) if (!f.dead) v2Debuff(s, f, "weakR", rint(1, m)); } },
   adrenal: { name: "흥분", icon: "🍖", type: "skill", cast: 0.5, focus: 0, rar: 2, exhaust: true, desc: "힘 +2 (이번 전투)", fire: (s, me, foe, dur, m = 1) => v2Str(s, me, rint(2, m)) },
-  entrench:{ name: "굳히기", icon: "🧱", type: "skill", get cast(){ return v2XDur(); }, x: true, focus: 0, rar: 1, desc: "X초 카드: 패턴 끝까지 남은 시간을 전부 씀. 1초당 보호막 1.5", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 1.5 * Math.max(1, dur) * m) },
+  entrench:{ name: "굳히기", icon: "🧱", type: "skill", get cast(){ return v2XDur(); }, x: true, focus: 0, rar: 1, desc: "X초 카드: 남은 내 시간을 전부 씀(다음 카드 전까지). 1초당 보호막 1.5", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 1.5 * Math.max(1, dur) * m) },
   sprint:  { name: "질주", icon: "💨", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "이번 패턴 동안 이동 속도 ×1.5", fire: (s, me, foe, dur, m = 1) => { const rd = s.rd, rem = rd ? rd.T - (s.tick - rd.t0) / 60 : 5; me.hasteMult = Math.max(me.hasteT > 0 ? me.hasteMult || 1 : 1, 1 + 0.5 * m); me.hasteT = Math.max(me.hasteT || 0, Math.ceil(rem * 60)); } },
   // 타임라인 조작 (v2.11)
   delay:   { name: "지연", icon: "⏸", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "가장 가까운 적 행동을 1.5초 뒤로 미룸 (이번 패턴 안에서)", fire: (s, me, foe, dur, m = 1) => { const n = v2NextEv(s); if (!n) return; n.v.t = Math.min(n.v.t + 1.5 * m, s.rd.T - 0.1); popS(s, n.E.ball.x, n.E.ball.y - n.E.ball.R - 20, "⏸지연"); } },
@@ -3319,8 +3319,9 @@ function v2PrepRound(s){
   if (P0.tsense) for (const E of en) for (const v of E.evs) v.t = Math.min(v.t + P0.tsense, E.pat.len - 0.05);   // 시간 감각
   if (P0.ritualN) v2Str(s, P0, P0.ritualN);   // 의식
   if (P0.elastic) P0.accel = Math.min(ACCEL_MAX, (P0.accel || 0) + P0.elastic);   // 탄력
-  let sum = 0; const cap = Math.ceil(L / 2);   // 뽑는 장수 상한 = 패턴 길이 ÷ 2(올림) — 짧은 카드만 들고 가면 시간이 빔
-  while (sum < L - 1e-6 && V.hand.length < cap){   // (v2.15) 합이 패턴 길이에 닿으면 그만 뽑음
+  V.budget = 7 + (s.balls[0].budgetMod || 0);   // (v2.21) 라운드마다 쓸 수 있는 내 시간
+  let sum = 0; const cap = 5;   // (v2.21) 5장 고정
+  while (V.hand.length < cap){
     if (!V.draw.length){ if (!V.disc.length) break; V.draw = v2Shuffle(V.disc.splice(0), s.rng); }
     const id = V.draw.pop(); V.hand.push(id); sum += CD(id).cast;
   }
@@ -3335,8 +3336,12 @@ function v2Timeline(s){   // 지금 손패 순서대로 시작·집중 끝·끝 
   let t = 0; return s.v2.hand.map((id, i) => { const c = CD(id), st = t; t += c.cast; return { i, id, start: st, fEnd: st + c.focus * s.v2.focusMul, end: t }; });
 }
 function v2Execute(s){
-  const L = s.rdPlan.L, all = v2Timeline(s), plan = all.filter(c => c.end <= L + 1e-3);   // (v2.15) 더미 타임 없음: 패턴 길이를 넘는 카드는 못 씀
-  const over = all.filter(c => c.end > L + 1e-3).map(c => c.id).filter(id => id !== "_blank"); if (over.length) s.v2.unused = (s.v2.unused || []).concat(over);
+  const V = s.v2, L = s.rdPlan.L, B = V.budget || 7; let plan;
+  if (V.planT){ plan = V.planT.map((p, i) => { const C = CD(p.id); return { i, id: p.id, start: p.start, fEnd: p.start + Math.min(p.dur, C.focus * V.focusMul), end: p.start + p.dur }; }); V.planT = null; }
+  else { let t = 0; plan = []; const over = [];   // 봇: 앞에서부터 붙여서, 내 시간·패턴 길이 안까지만
+    V.hand.forEach((id, i) => { const C = CD(id), d = C.x ? Math.max(SNAP, Math.floor((B - t) / SNAP) * SNAP) : C.cast;
+      if (id !== "_blank" && t + d <= Math.min(B, L) + 1e-6){ plan.push({ i, id, start: t, fEnd: t + Math.min(d, C.focus * V.focusMul), end: t + d }); t += d; } else if (id !== "_blank") over.push(id); });
+    if (over.length) V.unused = (V.unused || []).concat(over); }
   s.rd = { t0: s.tick, L, T: L, plan, en: s.rdPlan.en, over: false, cur: null };
   for (const b of s.balls) if (b.metal && !b.dead) v2Shield(s, b, b.metal);   // 금속화
 }
@@ -3434,71 +3439,78 @@ startBattle = function(){
 // 적 행동 종류(색으로만 구분): 공격 빨강 / 스킬 파랑 / 파워 보라
 const ENEMY_POWER = ["ritual", "atk", "accel"], ENEMY_ATK_EXTRA = ["quake", "charge"];
 const actType = sk => ENEMY_POWER.includes(sk) ? "power" : (SKILL[sk] && SKILL[sk].g === "공격") || ENEMY_ATK_EXTRA.includes(sk) ? "atk" : "skill";
-function v2Placed(s){ let t = 0; return s.v2.placed.map((hi, k) => { const id = hi === "B" ? "_blank" : s.v2.hand[hi], C = CD(id), st = t; t += C.cast; return { k, hi, id, start: st, end: t }; }); }
+// (v2.21) 시간 예산: 라운드마다 쓸 수 있는 내 시간(기본 7초) 안에서, 카드를 타임라인 원하는 위치(0.5초 단위)에 끌어다 놓음. 빈 곳은 관성으로 움직임
+const SNAP = 0.5, snapT = t => Math.round(t / SNAP) * SNAP;
+function v2Placed(s){ const V = s.v2; return V.placed.map((p, k) => ({ k, hi: p.hi, id: V.hand[p.hi], start: p.t, end: p.t + p.d, d: p.d })).sort((a, b) => a.start - b.start); }
 let planInfo = "";
 function renderPlan(){
   const s = state; if (!s) return; const V = s.v2;
   if (!s.planning){ v2PrepRound(s); s.rd = null; s.planning = true; V.placed = []; V.anim = true; planInfo = ""; }   // 라운드마다 한 번만 뽑음
   phase = "plan"; panel.classList.add("plan");
-  const pl0 = V.placed.filter(x => x !== "B"), nx = pl0.filter(i => CD(V.hand[i]).x).length, other = pl0.filter(i => !CD(V.hand[i]).x).reduce((a, i) => a + CD(V.hand[i]).cast, 0);
-  V.xDur = Math.max(1, Math.round((s.rdPlan.L - other) / Math.max(1, nx) * 10) / 10);   // X초 카드 = 남은 시간 전부
-  {   // 공백: 제자리에서 (패턴 길이 - 올린 카드 합)만큼. 공백을 올려도 카드를 더 올릴 수 있고 그만큼 공백이 줄어듦
-    const realSum = pl0.reduce((a, i) => a + CD(V.hand[i]).cast, 0);
-    V.blankDur = Math.max(0, Math.round((s.rdPlan.L - realSum) * 10) / 10);
-    if (V.blankDur < 0.1) V.placed = V.placed.filter(x => x !== "B");
-  }
-  const room = s.rdPlan.L - other - nx * 1;   // 새 카드를 올릴 수 있는 시간 (X초 카드는 최소 1초)
-  const fits = id => (CD(id).x ? (nx ? 1 : 1) : CD(id).cast) <= room + 1e-6 && !(CD(id).x && nx);   // X초 카드는 한 장만
-  const tl = v2Placed(s), sumAll = V.hand.reduce((a, id) => a + CD(id).cast, 0), sumP = tl.length ? tl[tl.length - 1].end : 0;
-  const L = s.rdPlan.L, T = L, pct = t => (Math.min(t, T) / T * 100).toFixed(2) + "%";
-  const fitLeft = V.hand.some((id, i) => !V.placed.includes(i) && fits(id));
-  // 필수: 뽑힌 필수 카드는 반드시 타임라인에. 예외 = 타임라인이 전부 필수 카드이고 남은 필수 카드가 남은 시간에 안 들어갈 때만
-  const mustLeft = V.hand.filter((id, i) => !V.placed.includes(i) && CD(id).must), allMust = !V.placed.includes("B") && V.placed.every(i => CD(V.hand[i]).must);
-  const mustOk = !mustLeft.length || (allMust && !mustLeft.some(fits));
-  const all = mustOk && (V.placed.includes("B") || sumP >= L - 0.05 || !fitLeft);   // 실행: 공백을 올렸거나, 다 찼거나, 더 올릴 카드가 없으면   // 패턴 길이를 다 채웠으면 실행 가능
-  let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
+  const L = s.rdPlan.L, T = L, B = V.budget, pct = t => (Math.max(0, Math.min(t, T)) / T * 100).toFixed(2) + "%";
+  const usedEx = ex => V.placed.reduce((a, p, k) => a + (k === ex ? 0 : p.d), 0), used = usedEx(-1), left = Math.max(0, +(B - used).toFixed(2));
+  const gapAt = (t, ex) => { let end = L; for (const [k, p] of V.placed.entries()){ if (k === ex) continue; if (p.t >= t - 1e-6 && p.t < end) end = p.t; } return end - t; };
+  const freeAt = (t, d, ex) => t >= -1e-6 && t + d <= L + 1e-6 && V.placed.every((p, k) => k === ex || t + d <= p.t + 1e-6 || t >= p.t + p.d - 1e-6);
+  const durFor = (hi, t, ex) => { const C = CD(V.hand[hi]); if (!C.x) return C.cast; return Math.floor(Math.min(B - usedEx(ex), gapAt(t, ex)) / SNAP + 1e-6) * SNAP; };   // X초 카드: 남은 내 시간 전부(다음 카드 전까지)
+  const canAt = (hi, t, ex) => { const d = durFor(hi, t, ex); return d >= SNAP - 1e-6 && freeAt(t, d, ex) && usedEx(ex) + d <= B + 1e-6 ? d : 0; };
+  const firstFit = (hi, ex) => { for (let t = 0; t <= L - SNAP + 1e-6; t += SNAP){ const d = canAt(hi, t, ex); if (d) return { t, d }; } return null; };
+  const placedIdx = new Set(V.placed.map(p => p.hi));
+  const tl = v2Placed(s);
+  // 필수: 뽑힌 필수 카드는 반드시 올림. 예외 = 올린 카드가 전부 필수이고 남은 필수 카드를 어디에도 못 놓을 때만
+  const mustLeft = V.hand.map((id, i) => i).filter(i => !placedIdx.has(i) && CD(V.hand[i]).must), allMust = V.placed.every(p => CD(V.hand[p.hi]).must);
+  const mustOk = !mustLeft.length || (allMust && mustLeft.every(i => !firstFit(i, -1)));
+  const all = mustOk;
+  let ruler = ""; for (let t = 0; t <= T + 1e-6; t += SNAP) ruler += Number.isInteger(t) ? `<span class="tlt" style="left:${pct(t)}">${t}</span>` : `<span class="tlh" style="left:${pct(t)}"></span>`;
+  const atkEv = s.rdPlan.en.map((E, ei) => E.evs.filter(v => actType(v.sk) === "atk").map(v => ({ ei, t: v.t })));   // 적 공격 순간 → 아래로 점선
+  const atkLines = below => atkEv.flat().filter(a => a.ei < below).map(a => `<div class="tlatk" style="left:${pct(a.t)}"></div>`).join("");
   const enemyRows = s.rdPlan.en.map((E, ei) => `<div class="tlrow"><div class="tlname en" data-en="${ei}">${E.ball.icon}</div><div class="tlbar">
-      <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
+      <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>${atkLines(ei)}
       ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-en="${ei}" data-ev="${vi}" style="left:${pct(v.t)}"><b>${SK_LABEL(v.sk)}</b><i class="evd">${evInfo(E.ball, v.sk, s.balls[0]).txt}</i></div>`).join("")}</div></div>`).join("");
-  const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine" id="tlmine">${tl.map(c => { const C = CD(c.id);
-      return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(C.cast)}"><span class="tlfocus" style="width:${(C.focus * V.focusMul / C.cast * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${C.x ? "X=" : ""}${C.cast}초</small></span></div>${c.id.startsWith("timebomb") ? `<div class="tlboom" style="left:${pct(Math.min(T, c.start + C.focus * V.focusMul + Math.max(0.5, 3 - (s.balls[0].demoM ? 1 : 0))))}">💥</div>` : ""}`; }).join("")}
+  const myRow = `<div class="tlrow"><div class="tlname"><div class="tclock${left <= 0 ? " empty" : ""}" title="남은 내 시간"><b>${+left.toFixed(1)}</b></div></div><div class="tlbar mine" id="tlmine">${atkLines(99)}${tl.map(c => { const C = CD(c.id);
+      return `<div class="tlcard ${C.type}" data-k="${c.k}" style="left:${pct(c.start)};width:${pct(c.d)}"><span class="tlfocus" style="width:${(Math.min(c.d, C.focus * V.focusMul) / c.d * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}<br><small>${c.start}~${+(c.end).toFixed(1)}초</small></span></div>${c.id.startsWith("timebomb") ? `<div class="tlboom" style="left:${pct(Math.min(T, c.start + C.focus * V.focusMul + Math.max(0.5, 3 - (s.balls[0].demoM ? 1 : 0))))}">💥</div>` : ""}`; }).join("")}
       <div class="tldrop" id="tldrop"></div></div></div>`;
-  const hand = V.hand.map((id, hi) => { const C = CD(id), used = V.placed.includes(hi), nofit = !used && !fits(id);
-    return `<div class="hcard ${C.type}${used ? " used" : ""}${nofit ? " nofit" : ""}${V.anim ? " drawin" : ""}" data-hi="${hi}" style="${V.anim ? `animation-delay:${(hi * 0.13).toFixed(2)}s` : ""}"><div class="hic">${C.icon}</div><div class="hnm">${C.name}</div><div class="hct">${C.x ? "X=" : ""}${C.cast}초</div>${C.must ? `<div class="hmust">필수</div>` : ""}</div>`; }).join("")
-    + (V.blankDur >= 0.1 ? `<div class="hcard blank${V.placed.includes("B") ? " used" : ""}" data-hi="B"><div class="hic">⬜</div><div class="hnm">공백</div><div class="hct">${V.blankDur}초</div></div>` : "");
-  panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 올린 시간 ${Math.min(L, sumP).toFixed(1)} / ${L}초</div>
+  const hand = V.hand.map((id, hi) => { const C = CD(id), usedC = placedIdx.has(hi), nofit = !usedC && !firstFit(hi, -1);
+    return `<div class="hcard ${C.type}${usedC ? " used" : ""}${nofit ? " nofit" : ""}${V.anim ? " drawin" : ""}" data-hi="${hi}" style="${V.anim ? `animation-delay:${(hi * 0.13).toFixed(2)}s` : ""}"><div class="hic">${C.icon}</div><div class="hnm">${C.name}</div><div class="hct">${C.x ? "X" : C.cast}초</div>${C.must ? `<div class="hmust">필수</div>` : ""}</div>`; }).join("");
+  panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 내 시간 ${+used.toFixed(1)} / ${B}초</div>
     <div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}</div></div>${enemyRows}${myRow}</div>
     <div class="handrow"><div class="pile" title="뽑을 카드">🂠<small>${V.draw.length}</small></div>${hand}<div class="pile disc" title="버린 카드">🗑<small>${V.disc.length}</small></div></div>
-    <div class="small pinfo" id="pinfo">${planInfo || "패를 누른 순서대로 타임라인에 올라가요 · 다 안 올려도 ⬜공백(남은 시간)을 올리면 실행 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 끌면 자리 이동 · 적 아이콘·행동을 누르면 적 정보"}</div>
-    <div class="row" style="gap:6px">${potRowHtml()}<button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? "▶ 실행" : !mustOk ? `🕸 필수 카드를 먼저 올려 주세요` : `시간을 다 채우거나 ⬜공백을 올려 주세요`}</button></div></div>`;
+    <div class="small pinfo" id="pinfo">${planInfo || `카드를 타임라인의 원하는 자리로 끌어다 놓아요(0.5초 단위) · 누르면 빈 자리 맨 앞에 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 빨간 점선 = 적 공격 순간 · 빈 곳에선 관성으로 움직여요`}</div>
+    <div class="row" style="gap:6px">${potRowHtml()}<button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? `▶ 실행${left > 0 ? ` (남은 ${+left.toFixed(1)}초)` : ""}` : `🕸 필수 카드를 먼저 올려 주세요`}</button></div></div>`;
   V.anim = false;
-  const showInfo = id => { const C = CD(id); planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
-  // 누르기/꾹 누르기/끌기 판별
+  const showInfo = id => { const C = CD(id); planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.x ? "X" : C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
   const press = (el, onTap, onHold, onDrag) => el.onpointerdown = e => {
     e.preventDefault(); const x0 = e.clientX, y0 = e.clientY; let held = false, drag = false;
     const tm = setTimeout(() => { held = true; onHold(); el.classList.add("held"); }, 320);
-    const mv = ev => { if (!drag && onDrag && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8){ drag = true; clearTimeout(tm); onDrag.start(); } if (drag) onDrag.move(ev); };
+    const mv = ev => { if (!drag && onDrag && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8){ drag = true; clearTimeout(tm); el.classList.remove("held"); onDrag.start(ev); } if (drag) onDrag.move(ev); };
     const up = ev => { clearTimeout(tm); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); el.classList.remove("held");
       if (drag) onDrag.end(ev); else if (!held) onTap(); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   };
-  // 적 정보: 적 아이콘을 누르면 능력치·특성·패턴, 행동 표시를 누르면 그 행동 설명
   const setInfo = h => { planInfo = h; const el = document.getElementById("pinfo"); if (el) el.innerHTML = h; };
   panel.querySelectorAll(".tlname.en").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], e = E.ball, c = e.cfg, P = patsOf(c);
     setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} 💪힘 ${+((e.atkBonus || 0) * 10).toFixed(1)}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
   panel.querySelectorAll(".tlev[data-ev]").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], v = E.evs[+el.dataset.ev], ty = actType(v.sk);
     setInfo(`<b>${E.ball.icon} ${SK_FULL(v.sk)}</b> <span class="evc ${ty}">${{ atk: "공격", skill: "스킬", power: "파워" }[ty]}</span> · 정신집중 ${v.f}초 (${(v.t - v.f).toFixed(1)}~${v.t}초, 이때 직접 공격하면 좌절) → ${v.t}초 발동${(i => i.d != null ? ` · 예상 피해 <b>${Math.round(i.d)}${EV_PER[v.sk] || ""}</b>` : "")(evInfo(E.ball, v.sk, s.balls[0]))}${EV_BASE[v.sk] != null || v.sk === "freeze" ? (EV_TARGET.has(v.sk) ? " · 🎯 타겟팅(피할 수 없음, 막거나 끊어야 함)" : " · ↗ 논타겟팅(움직임으로 피할 수 있음)") : ""} · ${SKILL[v.sk] ? SKILL[v.sk].desc || "" : ""}`); });
-  panel.querySelectorAll(".hcard").forEach(el => { const hi = el.dataset.hi === "B" ? "B" : +el.dataset.hi;
-    press(el, () => { if (!V.placed.includes(hi)){ if (hi !== "B" && !fits(V.hand[hi])){ setInfo(`⏱ 시간이 모자라요 (남은 ${Math.max(0, room).toFixed(1)}초). 다른 카드를 빼거나 공백으로 채워 주세요`); return; } V.placed.push(hi); renderPlan(); } }, () => showInfo(hi === "B" ? "_blank" : V.hand[hi])); });
   const bar = document.getElementById("tlmine"), drop = document.getElementById("tldrop");
-  panel.querySelectorAll(".tlcard").forEach(el => { const k = +el.dataset.k; let to = k;
-    press(el, () => { V.placed.splice(k, 1); renderPlan(); }, () => showInfo(V.placed[k] === "B" ? "_blank" : V.hand[V.placed[k]]), {
-      start: () => el.classList.add("dragging"),
-      move: ev => { const rc = bar.getBoundingClientRect(), tx = (ev.clientX - rc.left) / rc.width * T; el.style.transform = `translateX(${ev.clientX - rc.left - (parseFloat(el.style.left) / 100 * rc.width) - el.offsetWidth / 2}px)`;
-        to = tl.length; for (let q = 0; q < tl.length; q++) if (tx < (tl[q].start + tl[q].end) / 2){ to = q; break; }
-        const at = to < tl.length ? tl[to].start : sumP; drop.style.display = "block"; drop.style.left = pct(at); },
-      end: () => { const P = V.placed, [x] = P.splice(k, 1); P.splice(to > k ? to - 1 : to, 0, x); renderPlan(); } }); });
-  document.getElementById("pgo").onclick = () => { if (!all) return; V.unused = V.hand.filter((id, i) => !V.placed.includes(i)); V.hand = V.placed.map(i => i === "B" ? "_blank" : V.hand[i]); V.placed = []; v2Execute(s); s.planning = false; panel.classList.remove("plan"); phase = "battle"; last = performance.now(); acc = 0; renderSidesV2(); };
+  // 끌기: 손가락 위치 = 카드 가운데. 타임라인 위면 0.5초 단위로 맞춰 미리 보기(초록 = 놓을 수 있음, 빨강 = 안 됨)
+  const dragger = (hi, ex, srcEl) => { let ghost = null, at = null;
+    const tOf = ev => { const rc = bar.getBoundingClientRect(); if (ev.clientY < rc.top - 60 || ev.clientY > rc.bottom + 70) return null; const C = CD(V.hand[hi]), d0 = C.x ? 1 : C.cast;
+      return snapT(Math.max(0, Math.min(L - d0, (ev.clientX - rc.left) / rc.width * T - d0 / 2))); };
+    return { start: ev => { ghost = srcEl.cloneNode(true); ghost.className += " ghost"; ghost.style.cssText = `position:fixed;z-index:50;pointer-events:none;opacity:.85;width:${srcEl.offsetWidth}px;left:${ev.clientX - srcEl.offsetWidth / 2}px;top:${ev.clientY - 30}px`; document.body.appendChild(ghost); srcEl.classList.add("dragging"); },
+      move: ev => { ghost.style.left = ev.clientX - ghost.offsetWidth / 2 + "px"; ghost.style.top = ev.clientY - 30 + "px"; const t = tOf(ev);
+        if (t == null){ drop.style.display = "none"; at = null; return; } const d = canAt(hi, t, ex), dd = d || CD(V.hand[hi]).cast || 1;
+        drop.style.display = "block"; drop.style.left = pct(t); drop.style.width = pct(dd); drop.className = "tldrop " + (d ? "ok" : "bad"); drop.textContent = `${t}~${+(t + dd).toFixed(1)}초`; at = d ? { t, d } : null; },
+      end: () => { ghost && ghost.remove(); srcEl.classList.remove("dragging"); drop.style.display = "none";
+        if (at){ if (ex >= 0) V.placed[ex] = { hi, t: at.t, d: at.d }; else V.placed.push({ hi, t: at.t, d: at.d }); } else if (ex < 0) setInfo("⏱ 거기엔 못 놓아요 — 다른 카드와 겹치거나, 패턴 밖이거나, 내 시간이 모자라요");
+        renderPlan(); } }; };
+  panel.querySelectorAll(".hcard").forEach(el => { const hi = +el.dataset.hi;
+    press(el, () => { if (placedIdx.has(hi)) return; const f = firstFit(hi, -1); if (!f){ setInfo(`⏱ 놓을 자리가 없어요 (남은 내 시간 ${+left.toFixed(1)}초)`); return; } V.placed.push({ hi, t: f.t, d: f.d }); renderPlan(); },
+      () => showInfo(V.hand[hi]), placedIdx.has(hi) ? null : dragger(hi, -1, el)); });
+  panel.querySelectorAll(".tlcard").forEach(el => { const k = +el.dataset.k;
+    press(el, () => { V.placed.splice(k, 1); renderPlan(); }, () => showInfo(V.hand[V.placed[k].hi]), dragger(V.placed[k].hi, k, el)); });
+  document.getElementById("pgo").onclick = () => { if (!all) return; const pl = v2Placed(s);
+    V.unused = V.hand.filter((id, i) => !placedIdx.has(i)); V.planT = pl.map(c => ({ id: c.id, start: c.start, dur: c.d })); V.hand = pl.map(c => c.id); V.placed = [];
+    v2Execute(s); s.planning = false; panel.classList.remove("plan"); phase = "battle"; last = performance.now(); acc = 0; renderSidesV2(); };
   panel.querySelector(".pile:not(.disc)").onclick = () => showPile("draw");
   panel.querySelector(".pile.disc").onclick = () => showPile("disc");
   bindPotRow(panel);
@@ -3651,7 +3663,7 @@ document.getElementById("bBook").style.display = "none";
   #panel.plan{background:rgba(5,7,15,.55);align-content:flex-end}
   .mbox.wide{width:min(820px,97%)}
   .tl{display:flex;flex-direction:column;gap:4px}
-  .tlrow{display:flex;gap:4px;align-items:stretch}.tlname{width:22px;flex:none;font-size:16px;text-align:center}
+  .tlrow{display:flex;gap:4px;align-items:stretch}.tlname{width:38px;flex:none;font-size:16px;text-align:center}
   .tlbar{position:relative;flex:1;height:30px;background:#151a30;border-radius:6px}.tlbar.ruler{height:14px;background:none}.tlbar.mine{height:46px}
   .tlt{position:absolute;top:0;font-size:9px;color:#889;transform:translateX(-50%)}
   .tlidle{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,#222844,#222844 4px,#1a1f36 4px,#1a1f36 8px);border-radius:0 6px 6px 0}
@@ -3684,7 +3696,11 @@ document.getElementById("bBook").style.display = "none";
   .php i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#e04a5a,#ff7a7a);transition:width .15s}.pcard[data-pb="0"] .php i{background:linear-gradient(90deg,#2f8be0,#5ab0ff)}
   .php span{position:absolute;left:6px;top:0;font-size:10px;font-weight:bold;line-height:14px;text-shadow:0 1px 2px #000}.pbase{font-size:10px;color:#aab}
   .pst{display:flex;flex-wrap:wrap;gap:3px}.stc{font-size:13px;background:#232a4a;border-radius:6px;padding:1px 4px;line-height:1.3}.stc b{font-size:10px;margin-left:1px;color:#ffe066}
-  .hcard.curse,.tlcard.curse{background:repeating-linear-gradient(-45deg,#3a2244 0 6px,#2a1834 6px 12px);border-color:#9a5ab0}.ccard.curse{background:linear-gradient(#3a2244,#22142a);border-color:#9a5ab0}.hmust{font-size:9px;font-weight:bold;color:#ffb0ff;background:#5a2a6a;border-radius:4px;padding:0 4px}.hcard.nofit{opacity:.5;filter:grayscale(.85);border-style:dotted}.hcard.used{opacity:.3}.hcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border:2px dashed #888}.tlcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border-color:#888;border-style:dashed}.hcard .hic{font-size:22px}.hcard .hnm{font-size:11px;font-weight:bold;text-align:center;line-height:1.1}.hcard .hct{font-size:10px;color:#ccd}
+  .hcard.curse,.tlcard.curse{background:repeating-linear-gradient(-45deg,#3a2244 0 6px,#2a1834 6px 12px);border-color:#9a5ab0}.ccard.curse{background:linear-gradient(#3a2244,#22142a);border-color:#9a5ab0}.hmust{font-size:9px;font-weight:bold;color:#ffb0ff;background:#5a2a6a;border-radius:4px;padding:0 4px}.tlh{position:absolute;top:9px;width:1px;height:4px;background:#556}.tlatk{position:absolute;top:-4px;bottom:-4px;width:0;border-left:1.5px dashed rgba(255,90,90,.7);z-index:1;pointer-events:none}
+  .tclock{width:34px;height:34px;border-radius:50%;border:2.5px solid #ffe066;display:flex;align-items:center;justify-content:center;background:radial-gradient(#2a2f4a,#151a2e);position:relative;margin:auto}
+  .tclock::before{content:"";position:absolute;top:2px;left:50%;width:2px;height:6px;margin-left:-1px;background:#ffe066;border-radius:1px}.tclock b{font-size:13px;color:#fff}.tclock.empty{border-color:#666}.tclock.empty b{color:#888}
+  .tldrop.ok{background:rgba(90,220,120,.28);border:2px dashed #5adc78;color:#bfffd0}.tldrop.bad{background:rgba(255,80,80,.22);border:2px dashed #ff5a5a;color:#ffc0c0}.tldrop{font-size:10px;text-align:center;line-height:40px;z-index:6}
+  .hcard.nofit{opacity:.5;filter:grayscale(.85);border-style:dotted}.hcard.used{opacity:.3}.hcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border:2px dashed #888}.tlcard.blank{background:repeating-linear-gradient(45deg,#2a2d3a 0 6px,#22252f 6px 12px);border-color:#888;border-style:dashed}.hcard .hic{font-size:22px}.hcard .hnm{font-size:11px;font-weight:bold;text-align:center;line-height:1.1}.hcard .hct{font-size:10px;color:#ccd}
   .hcard.drawin{animation:drawin .45s cubic-bezier(.2,.8,.3,1.2) backwards}
   @keyframes drawin{from{transform:translate(-260px,30px) rotate(-25deg) scale(.4);opacity:0}to{transform:none;opacity:1}}
   .pinfo{min-height:2.4em}
@@ -3718,7 +3734,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.20";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.21";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
