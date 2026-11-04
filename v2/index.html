@@ -3274,7 +3274,7 @@ function autoPats(effs, boss){   // 패턴이 정해지지 않은 적: 자기 �
   if (u.length > 1) P.push({ len: L + 1, ev: u.slice(0, boss ? 4 : 3).map((e, i) => [2 + i * (boss ? 2.5 : 3), e]) });
   return P;
 }
-const ENEMY_FOCUS = { atk: 1, skill: 0.8, power: 1.5 };   // 적 행동 전 정신집중(초): 멈춰 서고, 내 직접 공격에 맞으면 좌절
+const ENEMY_FOCUS = { atk: 1, skill: 0.8, power: 0 };   // (v2.27) 적 파워는 정신집중 없음 (끊어서 막을 수 없음)   // 적 행동 전 정신집중(초): 멈춰 서고, 내 직접 공격에 맞으면 좌절
 const evFocus = (sk, t) => Math.min(t, (SKILL[sk] && SKILL[sk].v2 && SKILL[sk].v2.focus) || ENEMY_FOCUS[actType(sk)]);
 // 적 행동의 예상 피해(내 방어력 반영)와 타겟팅 여부: 🎯 = 반드시 맞음(타겟팅), ↗ = 피할 수 있음(논타겟팅)
 const EV_BASE = { spin: 20, bomb: 22, shoot: 17, missile: 13, fireball: 24, frostbolt: 15, dash: 16, zone: 16, nova: 42, boomerang: 24, lightning: 12, sonic: 24, watergun: 14, needle: 9, gust: 8, judgment: 16, hex: 30, quake: 28, poison: 16, charge: 60 };
@@ -3758,7 +3758,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.26";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.27";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
