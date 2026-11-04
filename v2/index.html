@@ -3275,15 +3275,15 @@ function autoPats(effs, boss){   // 패턴이 정해지지 않은 적: 자기 �
   return P;
 }
 const ENEMY_FOCUS = { atk: 1, skill: 0.8, power: 0 };   // (v2.27) 적 파워는 정신집중 없음 (끊어서 막을 수 없음)   // 적 행동 전 정신집중(초): 멈춰 서고, 내 직접 공격에 맞으면 좌절
-const evFocus = (sk, t) => Math.min(t, (SKILL[sk] && SKILL[sk].v2 && SKILL[sk].v2.focus) || ENEMY_FOCUS[actType(sk)]);
+const evFocus = (sk, t) => Math.min(t, SKILL[sk] && SKILL[sk].v2 ? (SKILL[sk].v2.type === "atk" ? TELE_T : 0) : ENEMY_FOCUS[actType(sk)]);   // (v2.29) 1막 적 공격 = 2초 경고
 // 적 행동의 예상 피해(내 방어력 반영)와 타겟팅 여부: 🎯 = 반드시 맞음(타겟팅), ↗ = 피할 수 있음(논타겟팅)
 const EV_BASE = { spin: 20, bomb: 22, shoot: 17, missile: 13, fireball: 24, frostbolt: 15, dash: 16, zone: 16, nova: 42, boomerang: 24, lightning: 12, sonic: 24, watergun: 14, needle: 9, gust: 8, judgment: 16, hex: 30, quake: 28, poison: 16, charge: 60 };
 const EV_TARGET = new Set(["missile", "lightning", "judgment", "gust", "hex", "quake", "poison", "freeze", "charge"]);
 const EV_PER = { zone: "/초", poison: "/4초" };
 function evInfo(e, sk, P){   // { d: 예상 피해 or null, tg: 타겟팅?, txt }
   const M2 = SKILL[sk] && SKILL[sk].v2; if (M2){ const b0 = M2.dyn ? M2.dyn(state, e, P || {}) : M2.d; if (b0 == null) return { d: null, tg: false, txt: "" };
-    const d = b0 * (1 + (e.atkBonus || 0)) * 12 / (12 + (P ? P.def || 0 : 0)) * V2_EDMG * (P && P.vulnR > 0 ? 1.5 : 1) * (e.weakR > 0 ? 0.75 : 1), tg = M2.kind === "sure";
-    return { d, n: M2.n, tg, txt: `⚔${Math.max(1, Math.round(d))}${M2.n > 1 ? "×" + M2.n : ""}` + (tg ? " 🎯" : " ↗") }; }
+    const d = b0 * MON_DMG * (1 + (e.atkBonus || 0)) * 12 / (12 + (P ? P.def || 0 : 0)) * V2_EDMG * (P && P.vulnR > 0 ? 1.5 : 1) * (e.weakR > 0 ? 0.75 : 1);
+    return { d, n: M2.n, tg: false, txt: `⚔${Math.max(1, Math.round(d))}${M2.n > 1 ? "×" + M2.n : ""} ⚠` }; }
   const b = EV_BASE[sk], tg = EV_TARGET.has(sk);
   const d = b == null ? null : b * e.atk * (1 + (e.atkBonus || 0)) / 12 * ((e.mod && e.mod[sk] && e.mod[sk].pow) || 1) * 12 / (12 + (P ? P.def || 0 : 0)) * V2_EDMG * (P && P.vulnR > 0 ? 1.5 : 1) * (e.weakR > 0 ? 0.75 : 1);
   const hasTg = b != null || sk === "freeze";
@@ -3312,7 +3312,7 @@ function startFightV2(r){
   const s = makeBattle(pc, ec, r.seed * 100 + r.floor * 7 + r.retry);
   s.noOT = true; s.noAttr = true; s.intDmg = true; s.maxTicks = T(600); s.dmgToE = V2_PDMG; s.dmgToP = V2_EDMG;   // 연장전 끔, 대신 양쪽 피해 배율
   s.hooks.drink = () => !!usePotion(s, r, 0, true);
-  s.v2 = { draw: (d => d.filter(k => !CD(k).innate).concat(d.filter(k => CD(k).innate)))(v2Shuffle(r.cards.map(c => c.id), s.rng)), disc: [], hand: [], bombs: [], kept: [], exh: [], timed: [], xDur: 2, round: 0, focusMul: 1, played: 0, lastAtk: null };
+  s.v2 = { draw: (d => d.filter(k => !CD(k).innate).concat(d.filter(k => CD(k).innate)))(v2Shuffle(r.cards.map(c => c.id), s.rng)), disc: [], hand: [], bombs: [], kept: [], exh: [], timed: [], teles: [], flashes: [], xDur: 2, round: 0, focusMul: 1, played: 0, lastAtk: null };
   s.balls.slice(1).forEach(e => { e.v2pi = Math.floor(s.rng() * 4); });
   const P = s.balls[0]; P.onFizzle = (s2, src) => { const c = s.rd && s.rd.cur; if (c && P.focus){ c.fizzled = true; P.focus = false; popS(s, P.x, P.y - P.R - 14, "😵좌절"); s.hurtT = 14;
     const base = c.id.replace("+", ""), m = c.id.endsWith("+") ? UP_MUL : 1;
@@ -3394,9 +3394,8 @@ function v2Tick(s){
   for (const E of rd.en){ const e = E.ball; if (e.dead){ e.focus = false; continue; }
     const cev = E.evs.find(v => !v.done && rt >= v.t - v.f && rt < v.t); E.cur = cev || null; e.focus = !!(cev && !cev.fizzled);
     e.v2E = E;
-    if (!e.onFizzle) e.onFizzle = () => { const E2 = e.v2E, v = E2 && E2.cur; if (v && e.focus){ v.fizzled = true; e.focus = false; popS(s, e.x, e.y - e.R - 14, "😵좌절");
-      if (P.breakSh){ v2Shield(s, P, P.breakSh); const nx = E2.evs.find(w => !w.done && !w.fizzled && w !== v); if (nx) nx.f = Math.min(nx.t, nx.f + 0.5 * (P.breakN || 1)); } } };
-    for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; if (!ev.fizzled){ e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast" }); } } }
+    e.onFizzle = null;   // (v2.29) 적 정신집중 끊기 없음 (경고 시간일 뿐)
+    for (const ev of E.evs) if (!ev.done && rt >= ev.t){ ev.done = true; if (!ev.fizzled){ e.castMul = 1; if (EFF[ev.sk]) EFF[ev.sk](s, e, P, { eff: ev.sk, lvMul: 1, act: "cast", ev }); } } }
   if (rt >= rd.T){ rd.over = true; P.focus = false; for (const E of rd.en) E.ball.focus = false;
     for (const c of rd.plan){ if (c.id === "_blank") continue; const C = CD(c.id); if (C.type === "power") continue; (C.exhaust ? V.exh : V.disc).push(c.id); }   // 파워·소멸 카드는 이번 전투에서 사라짐
     if (V.unused){ const nb = V.unused.filter(id => id === "burnc").length; if (nb){ const d = nb * (V.burnUp ? 4 : 2); hurt(s, P, null, d); popS(s, P.x, P.y - P.R - 30, `🔥화상 -${d}`); } }   // (v2.22) 화상: 손에 남으면 피해
@@ -3557,7 +3556,7 @@ renderPotions = function(){
 const pctTxt = x => (x >= 0 ? "+" : "") + Math.round(x * 100) + "%";
 const V2_ST = [   // [아이콘, 이름, 값(없으면 null), 설명]
   (b, s) => b.shieldT > 0 && b.shieldHp > 0.5 ? ["🛡", "보호막", fmt(b.shieldHp), "피해를 먼저 막아줌. 이번 패턴이 끝나면 사라짐"] : null,
-  (b, s) => b.focus ? ["🧠", "정신집중", "", "멈춰서 준비 중. 지금 직접 공격을 맞으면 좌절(행동 취소)"] : null,
+  (b, s) => b.focus ? (b.id === 0 ? ["🧠", "정신집중", "", "느려지며 준비 중. 지금 직접 공격을 맞으면 좌절(행동 취소)"] : ["⚠", "공격 준비", "", "바닥의 빨간 경고 범위에 곧 공격. 범위 밖으로 피하기"]) : null,
   (b, s) => Math.abs(b.atkBonus || 0) > 0.001 ? ["💪", "힘", (b.atkBonus > 0 ? "+" : "") + +(b.atkBonus * 10).toFixed(1), "힘 1당 주는 공격 피해 +10%"] : null,
   (b, s) => b.vulnR > 0 ? ["💔", "취약", b.vulnR + "R", "받는 공격 피해 +50%. 남은 라운드 수(이번 라운드 포함)만큼 지속"] : null,
   (b, s) => b.weakR > 0 ? ["🥀", "약화", b.weakR + "R", "주는 공격 피해 -25%. 남은 라운드 수(이번 라운드 포함)만큼 지속"] : null,
@@ -3758,7 +3757,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.28";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.29";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -3919,22 +3918,55 @@ const nowR = s => s.rd ? (s.tick - s.rd.t0) / 60 : 0;
 
 // ---- 적 행동 만들기: SKILL·EFF에 등록하고 id를 돌려줌 ----
 let MACT_N = 0;
-function mAct(spec){   // spec: { name, kind: "hit"|"shot"|"sure"|"none", d, n, dyn(s,me,P), focus, type: "atk"|"skill"|"power", fx(s,me,P) }
+const TELE_T = 2, TELE_LOCK = 0.6, MON_DMG = 1.5;   // (v2.29) 경고 표시 2초 · 발동 0.6초 전에 범위 고정 · 피할 수 있는 대신 피해 ×1.5
+const SHAPE_NAME = { lane: "직선 돌진", line: "레이저", circle: "내 자리 원형 폭발", ring: "자기 주변 원형 폭발", radial: "사방 레이저" };
+const shapeTxt = g => g.type === "line" && (g.n || 1) > 1 ? `레이저 ${g.n}갈래` : g.type === "radial" ? `사방 레이저 ${g.n}줄` : SHAPE_NAME[g.type];
+function mAct(spec){   // spec: { name, kind: "hit"|"shot"|"sure"|"none", d, n, dyn, shape:{type,…}, type, fx, onHit, t }
   const id = "m" + (++MACT_N), kind = spec.kind || "none", type = spec.type || (spec.d != null || spec.dyn ? "atk" : "skill");
+  const shape = spec.d == null && !spec.dyn ? null : spec.shape || (kind === "hit" ? { type: "lane" } : kind === "shot" ? { type: "line", n: 1, w: 24 } : { type: "circle", r: 60 });
   const fxT = spec.t || (spec.fx && spec.fx.t) || "";
-  const atkT = spec.d == null && !spec.dyn ? "" : (kind === "hit" ? "몸통 돌진 피해 " : kind === "shot" ? "투사체 피해 " : "확정 피해 ") + (spec.dtxt || spec.d) + ((spec.n || 1) > 1 ? ` × ${spec.n}번` : "");
-  SKILL[id] = { label: spec.name, desc: spec.desc || [atkT, fxT].filter(Boolean).join(" + ") || "행동 없음", g: type === "atk" ? "공격" : "보조", rar: 0, enemy: true, attrs: ["normal"], v2: { kind, d: spec.d, n: spec.n || 1, dyn: spec.dyn, focus: spec.focus, type } };
+  const atkT = !shape ? "" : `⚠ ${shapeTxt(shape)} 피해 ` + (spec.dtxt ? spec.dtxt + " ×" + MON_DMG : Math.round(spec.d * MON_DMG)) + ((spec.n || 1) > 1 ? ` × ${spec.n}번` : "");
+  SKILL[id] = { label: spec.name, desc: spec.desc || [atkT, fxT && shape ? "맞으면 " + fxT : fxT].filter(Boolean).join(" + ") || "행동 없음", g: type === "atk" ? "공격" : "보조", rar: 0, enemy: true, attrs: ["normal"], v2: { kind, d: spec.d, n: spec.n || 1, dyn: spec.dyn, shape, type } };
   if (type === "power") ENEMY_POWER.push(id);
-  EFF[id] = (s, me, foe) => { const P = s.balls[0]; if (P.dead) return; const base = spec.dyn ? spec.dyn(s, me, P) : spec.d;
-    if (base != null){
-      if (kind === "hit"){ const a = Math.atan2(P.y - me.y, P.x - me.x); me.hx = Math.cos(a); me.hy = Math.sin(a); me.dashT = T(0.7); me.dashMult = 3.2; s.dashes.push({ owner: me.id, sk: "dash", t: T(0.7), dmg: base * (1 + me.atkBonus), hit: [] }); }
-      else if (kind === "shot") mkShot(s, me, P, { eff: "shoot", lvMul: base / 17, act: "cast" }, 17, 10, 160, 0.05, 8, "#ff9aa5");
-      else { const n = spec.n || 1; for (let i = 0; i < n; i++) s.v2.timed.push({ at: s.tick + i * 12, fn: () => { if (me.dead || P.dead) return; s.bolts.push({ x1: me.x, y1: me.y, x2: P.x, y2: P.y, t: 0, col: "#ff8080" }); hurt(s, P, me, base * (1 + me.atkBonus)); if (spec.onHit) spec.onHit(s, me, P); } }); }
-    }
-    if (spec.fx) spec.fx(s, me, P);
+  EFF[id] = (s, me, foe, ab) => { const P = s.balls[0]; if (P.dead) return; const base = spec.dyn ? spec.dyn(s, me, P) : spec.d;
+    if (base != null && shape){
+      const g = (ab && ab.ev && ab.ev.tg) || teleGeo(shape, me, P), hit = teleHit(g, P);
+      s.v2.flashes.push({ g, t: 0, hit });
+      if (g.type === "lane"){ me.hx = Math.cos(g.ang); me.hy = Math.sin(g.ang); me.dashT = T(0.3); me.dashMult = Math.min(9, g.len / (Math.max(1, me.spd) * 18)); }   // 경로를 따라 돌진하는 모습
+      if (hit){ const n = spec.n || 1; for (let i = 0; i < n; i++) s.v2.timed.push({ at: s.tick + i * 8, fn: () => { if (!me.dead && !P.dead) hurt(s, P, me, base * (1 + me.atkBonus) * MON_DMG); } });
+        if (spec.onHit) spec.onHit(s, me, P); if (spec.fx) spec.fx(s, me, P); }
+      else popS(s, P.x, P.y - P.R - 26, "💨회피!");
+    } else if (spec.fx) spec.fx(s, me, P);
     popS(s, me.x, me.y - me.R - 22, spec.name); };
   return id;
 }
+// ---- 공격 경고 범위 (바닥에 빨갛게) ----
+function teleGeo(sh, e, P){ const a = Math.atan2(P.y - e.y, P.x - e.x), dist = Math.hypot(P.x - e.x, P.y - e.y);
+  switch (sh.type){
+    case "lane": return { type: "lane", x: e.x, y: e.y, ang: a, len: clamp(dist + 70, 150, 430), w: sh.w || 2 * e.R + 14, n: 1 };
+    case "line": return { type: "line", x: e.x, y: e.y, ang: a, len: 720, w: sh.w || 24, n: sh.n || 1, spread: sh.spread || 0.32 };
+    case "radial": return { type: "radial", x: e.x, y: e.y, ang: a, len: 720, w: sh.w || 26, n: sh.n || 6, spread: 2 * Math.PI / (sh.n || 6) };
+    case "ring": return { type: "ring", x: e.x, y: e.y, r: sh.r || 120, follow: true };
+    default: return { type: "circle", x: P.x, y: P.y, r: sh.r || 60 };
+  } }
+function teleUpd(g, e, P){ const n = teleGeo(g.type === "lane" || g.type === "line" || g.type === "radial" ? { type: g.type, w: g.w, n: g.n, spread: g.type === "line" ? g.spread : undefined } : g, e, P);
+  if (g.type === "circle"){ g.x = n.x; g.y = n.y; } else { g.x = n.x; g.y = n.y; if (n.ang != null) g.ang = n.ang; if (g.type === "lane") g.len = n.len; } }
+const teleAngs = g => g.type === "radial" ? Array.from({ length: g.n }, (_, k) => g.ang + k * g.spread) : Array.from({ length: g.n || 1 }, (_, k) => g.ang + (k - ((g.n || 1) - 1) / 2) * (g.spread || 0));
+function teleHit(g, P){ const pad = P.R * 0.55;   // 내 공 가장자리가 살짝 걸친 정도는 봐줌
+  if (g.type === "circle" || g.type === "ring") return Math.hypot(P.x - g.x, P.y - g.y) < g.r + pad;
+  for (const a of teleAngs(g)){ const ux = Math.cos(a), uy = Math.sin(a), px = P.x - g.x, py = P.y - g.y, along = px * ux + py * uy, perp = Math.abs(-px * uy + py * ux);
+    if (along > -P.R && along < g.len + P.R && perp < g.w / 2 + pad) return true; }
+  return false; }
+function v2TeleTick(s){ const rd = s.rd, P = s.balls[0], rt = (s.tick - rd.t0) / 60;
+  for (const E of rd.en){ const e = E.ball; if (e.dead) continue;
+    for (const v of E.evs){ const M2 = SKILL[v.sk] && SKILL[v.sk].v2; if (v.done || !M2 || !M2.shape || rt < v.t - v.f) continue;
+      if (!v.tg){ v.tg = teleGeo(M2.shape, e, P); v.tg.t0 = v.t - v.f; v.tg.t1 = v.t; s.v2.teles.push(v); }
+      if (rt < v.t - TELE_LOCK) teleUpd(v.tg, e, P); else v.tg.locked = true; } }
+  s.v2.teles = s.v2.teles.filter(v => !v.done);
+}
+function drawTeleShape(c, g, fill, stroke, lw){ c.fillStyle = fill; c.strokeStyle = stroke; c.lineWidth = lw;
+  if (g.type === "circle" || g.type === "ring"){ c.beginPath(); c.arc(g.x, g.y, g.r, 0, 6.29); c.fill(); c.stroke(); return; }
+  for (const a of teleAngs(g)){ c.save(); c.translate(g.x, g.y); c.rotate(a); c.beginPath(); c.rect(0, -g.w / 2, g.len, g.w); c.fill(); c.stroke(); c.restore(); } }
 const MA = {   // 자주 쓰는 행동
   hit: (name, d, extra) => mAct({ name, kind: "hit", d, ...(extra || {}) }),
   shot: (name, d, extra) => mAct({ name, kind: "shot", d, ...(extra || {}) }),
@@ -3979,7 +4011,7 @@ const MON = {
   spikeS: { name: "가시 슬라임(소)", icon: "🟣", art: "slime", color: "#c09ae0", hp: 8, R: 14, order: O.cycle(),
     pats: [P8([4, MA.hit("몸통", 5)])] },
   acidL:  { name: "산성 슬라임(대)", icon: "🟢", art: "slime", color: "#3ab05a", hp: 43, R: 28, order: O.rand(), split: ["acidM", "acidM"],
-    pats: [P12([5, MA.shot("부식 침", 11, { fx: fxCards("slimed", 2) })]), P12([5, MA.hit("몸통", 16)]), P12([5, MA.fx("핥기", fxDeb("weakR", 2))])] },
+    pats: [P12([5, MA.shot("부식 침", 11, { shape: { type: "line", n: 3, spread: 0.3, w: 26 }, fx: fxCards("slimed", 2) })]), P12([5, MA.hit("몸통", 16)]), P12([5, MA.fx("핥기", fxDeb("weakR", 2))])] },
   spikeL: { name: "가시 슬라임(대)", icon: "🟣", art: "slime", color: "#9a5ac0", hp: 43, R: 28, order: O.rand(), split: ["spikeM", "spikeM"],
     pats: [P12([5, MA.hit("불꽃 몸통", 16, { fx: fxCards("slimed", 2) })]), P12([5, MA.fx("핥기", fxDeb("frailR", 2))])] },
   slaverB:{ name: "파란 노예상", icon: "⛓", art: "duelist", color: "#4a7ad0", hp: 31, R: 22, order: O.rand({ max: 2 }),
@@ -3989,34 +4021,34 @@ const MON = {
   fungi:  { name: "버섯 짐승", icon: "🍄", art: "doom", color: "#c06a8a", hp: 16, R: 20, order: O.rand({ max: 2 }), onDeath: (s, e) => v2Debuff(s, s.balls[0], "vulnR", 2),
     pats: [P10([4, MA.hit("물기", 6)]), P10([4, MA.fx("성장", fxStr(3), "power")])] },
   looter: { name: "약탈자", icon: "💰", art: "archer", color: "#8a7a4a", hp: 30, R: 22, order: (e, s, m) => [0, 0, 1, 2][Math.min(3, m.n)],
-    pats: [P10([4, MA.sure("강탈", 10, 1, { onHit: (s, me) => v2Steal(s, me, 15), t: "골드 15 훔침 (쓰러뜨리면 돌려받음, 도망가면 못 받음)" })]), P10([4, MA.hit("돌진", 12)]), P10([2, MA.fx("연막", fxBlock(6))], [9, MA.fx("도망", (s, me) => v2Escape(s, me), "skill", { t: "전투에서 도망 — 훔친 골드는 사라짐" })])] },
+    pats: [P10([4, MA.sure("강탈", 10, 1, { shape: { type: "lane" }, onHit: (s, me) => v2Steal(s, me, 15), t: "골드 15 훔침 (쓰러뜨리면 돌려받음, 도망가면 못 받음)" })]), P10([4, MA.hit("돌진", 12)]), P10([2, MA.fx("연막", fxBlock(6))], [9, MA.fx("도망", (s, me) => v2Escape(s, me), "skill", { t: "전투에서 도망 — 훔친 골드는 사라짐" })])] },
   gFat:   { name: "뚱보 그렘린", icon: "👺", art: "tank", color: "#a08a5a", hp: 9, R: 18, order: O.cycle(), pats: [P8([4, MA.hit("내려치기", 4, { fx: fxDeb("weakR", 1) })])] },
   gSneak: { name: "교활한 그렘린", icon: "👺", art: "duelist", color: "#6a8a5a", hp: 8, R: 16, order: O.cycle(), pats: [P8([4, MA.hit("찌르기", 9)])] },
   gMad:   { name: "미친 그렘린", icon: "👺", art: "berserk", color: "#c05a3a", hp: 14, R: 18, order: O.cycle(), init: e => { e.angry = 1; }, pats: [P8([4, MA.hit("할퀴기", 4)])] },
   gShield:{ name: "방패 그렘린", icon: "👺", art: "paladin", color: "#7a8aa0", hp: 9, R: 18, order: (e, s) => s.balls.some(b => b.id !== 0 && b !== e && !b.dead) ? 0 : 1,
     pats: [P8([4, MA.fx("보호", (s, me) => { const o = s.balls.filter(b => b.id !== 0 && b !== me && !b.dead); if (o.length) v2Shield(s, o[Math.floor(s.rng() * o.length)], 7); }, "skill", { t: "다른 적 하나에게 보호막 7" })]), P8([4, MA.hit("방패 치기", 6)])] },
   gWiz:   { name: "그렘린 마법사", icon: "👺", art: "warlock", color: "#6a4aa0", hp: 15, R: 18, order: (e, s, m) => { if ((m.c || 0) >= 2){ m.c = 0; return 1; } m.c = (m.c || 0) + 1; return 0; },
-    pats: [P8([4, MA.fx("충전", () => {}, "skill", { t: "마력을 모음 (행동 없음). 2번 모은 다음 라운드에 궁극 화염 25" })]), P8([5, MA.sure("궁극 화염", 25, 1, { focus: 2 })])] },
+    pats: [P8([4, MA.fx("충전", () => {}, "skill", { t: "마력을 모음 (행동 없음). 2번 모은 다음 라운드에 궁극 화염 25" })]), P8([5, MA.sure("궁극 화염", 25, 1, { shape: { type: "circle", r: 95 } })])] },
   // ---- 정예 ----
   nob:    { name: "그렘린 대장", icon: "👹", art: "berserk", color: "#b03a3a", hp: 54, R: 26, elite: true, order: O.rand({ first: 0, w: [0, 2, 1], max: 2 }),
     pats: [P10([3, MA.fx("고함", (s, me) => { me.enrage = (me.enrage || 0) + 2; }, "power", { t: "격분: 이후 내가 스킬 카드를 낼 때마다 대장의 힘 +2" })]), P10([4, MA.hit("돌진", 14)]), P10([4, MA.hit("두개골 강타", 6, { fx: fxDeb("vulnR", 2) })])] },
   laga:   { name: "라가불린", icon: "🐢", art: "tank", color: "#5a7a6a", hp: 72, R: 28, elite: true, order: O.cycle(), init: e => { e.asleep = 3; e.metal = 8; e.spd0 = e.spd; e.spd = 0; },
-    pats: [P10([4, MA.hit("내려찍기", 18)]), P10([4, MA.hit("내려찍기", 18)]), P10([5, MA.fx("영혼 흡수", (s, me, P) => { v2Str(s, P, -1); P.dex = (P.dex || 0) - 1; }, "power", { t: "나에게 힘 -1, 방패술 -1 (이번 전투 동안)" })])] },
+    pats: [P10([4, MA.hit("내려찍기", 18, { shape: { type: "circle", r: 85 } })]), P10([4, MA.hit("내려찍기", 18, { shape: { type: "circle", r: 85 } })]), P10([5, MA.fx("영혼 흡수", (s, me, P) => { v2Str(s, P, -1); P.dex = (P.dex || 0) - 1; }, "power", { t: "나에게 힘 -1, 방패술 -1 (이번 전투 동안)" })])] },
   sentry: { name: "보초기", icon: "🗼", art: "clock", color: "#c8b080", hp: 26, R: 20, elite: true, order: (e, s, m) => ((e.cfg.slot === 1 ? 1 : 0) + m.n) % 2, init: e => { e.artifact = 1; },
-    pats: [P10([4, MA.fx("볼트", fxCards("dazed", 2))]), P10([4, MA.shot("빔", 9)])] },
+    pats: [P10([4, MA.fx("볼트", fxCards("dazed", 2))]), P10([4, MA.shot("빔", 9, { shape: { type: "line", n: 1, w: 30 } })])] },
   // ---- 보스 ----
   slimeK: { name: "슬라임 왕", icon: "👑", art: "slime", color: "#4ac06a", hp: 91, R: 34, boss: true, order: O.cycle(), split: ["acidL", "spikeL"],
-    pats: [P10([4, MA.fx("점액 뿌리기", fxCards("slimed", 3))]), P10([5, MA.fx("준비", () => {}, "skill", { t: "다음 라운드 내려찍기 35를 준비 (행동 없음)" })]), P10([5, MA.hit("내려찍기", 35, { focus: 2 })])] },
+    pats: [P10([4, MA.fx("점액 뿌리기", fxCards("slimed", 3))]), P10([5, MA.fx("준비", () => {}, "skill", { t: "다음 라운드 내려찍기 35를 준비 (행동 없음)" })]), P10([5, MA.hit("내려찍기", 35, { shape: { type: "circle", r: 110 } })])] },
   guardian:{ name: "수호자", icon: "🛡", art: "paladin", color: "#8a9ab0", hp: 156, R: 32, boss: true, init: e => { e.mode = "atk"; e.modeDmg = 0; e.modeThr = 20; },
     order: (e, s, m) => { if (e.mode === "def"){ m.dn = (m.dn || 0) + 1; if (m.dn === 1) return 4; if (m.dn === 2) return 5; e.mode = "atk"; e.v2thorns = 0; e.modeDmg = 0; m.an = 0; }
       const i = (m.an || 0) % 4; m.an = (m.an || 0) + 1; return i; },
-    pats: [P10([3, MA.fx("충전", fxBlock(9))]), P10([5, MA.hit("강타", 32, { focus: 2 })]), P10([4, MA.fx("증기", fxAll(fxDeb("weakR", 2), fxDeb("vulnR", 2)))]), P10([4, MA.sure("회오리", 5, 4)]),
-      P10([4, MA.hit("굴러 박기", 9)]), P10([4, MA.sure("연타", 8, 2)])] },
+    pats: [P10([3, MA.fx("충전", fxBlock(9))]), P10([5, MA.hit("강타", 32, { shape: { type: "line", n: 3, spread: 0.38, w: 34 } })]), P10([4, MA.fx("증기", fxAll(fxDeb("weakR", 2), fxDeb("vulnR", 2)))]), P10([4, MA.sure("회오리", 5, 4, { shape: { type: "ring", r: 130 } })]),
+      P10([4, MA.hit("굴러 박기", 9)]), P10([4, MA.sure("연타", 8, 2, { shape: { type: "line", n: 2, spread: 0.3, w: 30 } })])] },
   hexa:   { name: "육각령", icon: "👻", art: "pyro", color: "#6ad0ff", hp: 163, R: 32, boss: true, order: (e, s, m) => m.n === 0 ? 0 : m.n === 1 ? 1 : 2 + (m.n - 2) % 7,
-    pats: [P10([5, MA.fx("활성", () => {}, "skill", { t: "깨어남 (행동 없음). 다음 라운드에 분할 공격" })]), P10([5, mAct({ name: "분할", kind: "sure", n: 6, focus: 2, dtxt: "(내 현재 체력 ÷ 14 + 1)", dyn: (s, me, P) => Math.floor(P.hp / 14) + 1 })]),
-      P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]), P10([4, MA.sure("몸통", 5, 2)]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
-      P10([4, MA.fx("강화", fxAll(fxStr(2), fxBlock(12)), "power")]), P10([4, MA.sure("몸통", 5, 2)]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
-      P10([5, MA.sure("지옥불", 2, 6, { fx: s => { s.v2.burnUp = true; }, t: "내 덱의 🔥화상 카드 강화 (손에 남으면 피해 2 → 4)" })])] }
+    pats: [P10([5, MA.fx("활성", () => {}, "skill", { t: "깨어남 (행동 없음). 다음 라운드에 분할 공격" })]), P10([5, mAct({ name: "분할", kind: "sure", n: 6, shape: { type: "radial", n: 6, w: 30 }, dtxt: "(내 현재 체력 ÷ 14 + 1)", dyn: (s, me, P) => Math.floor(P.hp / 14) + 1 })]),
+      P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]), P10([4, MA.sure("몸통", 5, 2, { shape: { type: "lane" } })]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
+      P10([4, MA.fx("강화", fxAll(fxStr(2), fxBlock(12)), "power")]), P10([4, MA.sure("몸통", 5, 2, { shape: { type: "lane" } })]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
+      P10([5, MA.sure("지옥불", 2, 6, { shape: { type: "ring", r: 165 }, fx: s => { s.v2.burnUp = true; }, t: "내 덱의 🔥화상 카드 강화 (손에 남으면 피해 2 → 4)" })])] }
 };
 function v2Steal(s, me, n){ const r = runState, a = Math.min(n, r.gold || 0); if (a <= 0) return; r.gold -= a; me.stolen = (me.stolen || 0) + a; popS(s, me.x, me.y - me.R - 30, `💰-${a}`); updateHud(); }
 function v2Escape(s, me){ me.escaped = true; me.dead = true; me.hp = 0; s.booms.push({ x: me.x, y: me.y, r: 40, t: 0, col: "#aaa" }); popS(s, me.x, me.y - me.R - 14, "💨도망!"); }
@@ -4116,7 +4148,7 @@ const MON_NOTE = {
   slimeK: "👑 분열 — 체력이 절반 이하가 되면 다음 라운드에 산성(대)+가시(대)로 갈라짐 (각자 남은 체력)",
   fungi: "🍄 죽을 때 포자 — 쓰러지면 나에게 💔취약 2", looter: "💰 강탈한 골드는 쓰러뜨리면 돌려받음. 4번째 라운드에 도망",
   gMad: "😡 분노 1 — 피해를 입을 때마다 힘 +1", gShield: "동료가 있으면 동료에게 보호막, 혼자 남으면 직접 공격",
-  gWiz: "충전 2번 → 궁극 화염 25 (집중 2초 동안 끊으면 취소)", nob: "😠 고함 이후 격분 — 내가 스킬 카드를 낼 때마다 힘 +2 (공격 카드는 괜찮음)",
+  gWiz: "충전 2번 → 궁극 화염(큰 원형 폭발)", nob: "😠 고함 이후 격분 — 내가 스킬 카드를 낼 때마다 힘 +2 (공격 카드는 괜찮음)",
   laga: "💤 처음 3라운드 잠 (금속화 8: 라운드마다 보호막 8). 맞아서 깨면 다음 라운드는 기절. 깨면 금속화 사라짐",
   sentry: "🔷 인공물 1 — 해로운 효과 1번 무효. 양쪽은 볼트부터, 가운데는 빔부터 번갈아",
   guardian: "⚙ 공격 모드에서 피해 20을 받으면 방어 모드(보호막 20, 🌵가시 4: 때리면 나도 4 피해). 방어 모드 2라운드 뒤 공격 모드로, 문턱 +10",
@@ -4125,13 +4157,13 @@ const MON_NOTE = {
 };
 function v2EvHtml(e, v, P){
   const ty = actType(v.sk), S = SKILL[v.sk] || {}, M2 = S.v2, i = evInfo(e, v.sk, P), tyN = { atk: "공격", skill: "스킬", power: "파워" }[ty];
-  const dodge = M2 ? (i.d != null ? (i.tg ? "🎯 확정 — 피할 수 없음. 보호막으로 막거나, 정신집중 중에 직접 공격해서 끊어야 함" : "↗ 논타겟팅 — 움직임(빈 시간)으로 피할 수 있음") : "")
+  const dodge = M2 ? (i.d != null ? `⚠ 발동 ${TELE_T}초 전부터 바닥에 빨간 경고 범위가 보임 → ${TELE_LOCK}초 전에 범위가 고정됨 → 그때 범위 밖이면 안 맞음 (🕹 조향으로 피하기)` : "")
     : (EV_BASE[v.sk] != null || v.sk === "freeze" ? (EV_TARGET.has(v.sk) ? "🎯 타겟팅 — 피할 수 없음, 막거나 끊어야 함" : "↗ 논타겟팅 — 움직임으로 피할 수 있음") : "");
   return `<div style="font-size:14px"><b>${e.icon || ""} ${e.name} — ${S.label || v.sk}</b> <span class="evc ${ty}">${tyN}</span></div>
     <div class="small" style="margin-top:4px">📜 <b>효과:</b> ${S.desc || "-"}</div>
     ${i.d != null ? `<div class="small">⚔ <b>지금 맞으면:</b> ${Math.max(1, Math.round(i.d))}${i.n > 1 ? ` × ${i.n}번 = ${Math.max(1, Math.round(i.d)) * i.n}` : ""}${EV_PER[v.sk] || ""} <span style="opacity:.7">(적 힘·약화, 내 취약·방어 반영)</span></div>` : ""}
     ${dodge ? `<div class="small">${dodge}</div>` : ""}
-    <div class="small">⏱ ${(v.t - v.f).toFixed(1)}초부터 정신집중 ${v.f}초 → <b>${v.t}초에 발동</b> · 집중 중에 내 직접 공격에 맞으면 😵좌절(취소)</div>
+    <div class="small">⏱ ${v.f ? `${(v.t - v.f).toFixed(1)}초부터 준비(경고) ${v.f}초 → ` : ""}<b>${v.t}초에 발동</b>${M2 ? "" : " · 집중 중에 내 직접 공격에 맞으면 😵좌절(취소)"}</div>
     ${e.cfg && MON_NOTE[e.cfg.mon] ? `<div class="small" style="color:#ffd27a">특성: ${MON_NOTE[e.cfg.mon]}</div>` : ""}`;
 }
 function v2ShowEv(e, v){ openInfo("적 행동", v2EvHtml(e, v, state.balls[0])); }
@@ -4173,6 +4205,27 @@ setInterval(joyPlace, 400);   // 화면 전환(계획 ↔ 전투 ↔ 지도) 따
 // 🛠 켜기/끄기
 { const row = document.querySelector("#devbox .row"); if (row){ const b = document.createElement("button"); b.className = "dbg"; const lab = () => b.textContent = JOY.on ? "🕹 조향 끄기" : "🕹 조향 켜기"; lab();
   b.onclick = () => { JOY.on = !JOY.on; try { localStorage.setItem("v2joy", JOY.on ? "1" : "0"); } catch (e) {} lab(); joyReset(); joyPlace(); }; row.insertBefore(b, row.firstChild); } }
+
+// ===== (v2.29) 경고 범위: 매 틱 갱신 + 그리기 =====
+{ const st0 = step; step = function(s){ if (s.v2 && s.rd && !s.rd.over && s.v2.teles) v2TeleTick(s); st0(s); }; }
+{ const dr = drawV2; drawV2 = function(c, s){
+  if (s.v2 && s.rd && !s.rd.over){ const rt = (s.tick - s.rd.t0) / 60;
+    for (const v of s.v2.teles){ const g = v.tg; if (!g || v.done) continue; const p = clamp((rt - g.t0) / Math.max(0.05, g.t1 - g.t0), 0, 1);
+      c.save(); drawTeleShape(c, g, `rgba(255,40,40,${0.08 + 0.22 * p})`, g.locked ? `rgba(255,90,90,${0.7 + 0.3 * Math.sin(s.tick / 2)})` : "rgba(255,90,90,.45)", g.locked ? 2.5 : 1.5);
+      if (g.type === "circle" || g.type === "ring"){ c.beginPath(); c.arc(g.x, g.y, g.r * p, 0, 6.29); c.fillStyle = "rgba(255,60,60,.18)"; c.fill(); }   // 차오르는 원 = 남은 시간
+      else for (const a of teleAngs(g)){ c.save(); c.translate(g.x, g.y); c.rotate(a); c.fillStyle = "rgba(255,60,60,.22)"; c.fillRect(0, -g.w / 2 * p, g.len, g.w * p); c.restore(); }
+      c.restore(); }
+    for (const f of s.v2.flashes){ f.t++; c.save(); const al = Math.max(0, 1 - f.t / 14); drawTeleShape(c, f.g, `rgba(255,${f.hit ? 120 : 200},${f.hit ? 80 : 160},${0.55 * al})`, `rgba(255,255,255,${0.8 * al})`, 2); c.restore(); }
+    s.v2.flashes = s.v2.flashes.filter(f => f.t < 14); }
+  dr(c, s); }; }
+
+// ===== (v2.29) 회피 카드 (시험 2장) =====
+Object.assign(CARDS, {
+  galestep: { name: "질풍 걸음", icon: "🌬", type: "skill", cast: 3, focus: 1, rar: 1, desc: "2초 동안 이동 속도 ×2 (경고 범위에서 빠져나오기)", fire: (s, me, foe, dur, m = 1) => { me.hasteMult = Math.max(me.hasteT > 0 ? me.hasteMult || 1 : 1, 1 + m); me.hasteT = Math.max(me.hasteT || 0, T(2)); popS(s, me.x, me.y - me.R - 30, "🌬질풍"); } },
+  netshot:  { name: "투망 발사", icon: "🥅", type: "atk", cast: 2, focus: 1, rar: 1, desc: "가까운 적에게 그물 (피해 5, 1.5초 크게 둔화) + 반동으로 뒤로 크게 물러남", fire: (s, me, foe) => { const f = nearFoe(s, me) || foe; if (!f) return;
+    s.bolts.push({ x1: me.x, y1: me.y, x2: f.x, y2: f.y, t: 0, col: "#d8e8ff" }); hurt(s, f, me, pw(me, 5, wab("stick"))); f.slowT = Math.max(f.slowT, T(1.5)); f.slowMult = Math.min(f.slowMult || 1, 0.3); popS(s, f.x, f.y - f.R - 20, "🥅둔화");
+    const d = Math.hypot(me.x - f.x, me.y - f.y) || 1; me.hx = (me.x - f.x) / d; me.hy = (me.y - f.y) / d; me.dashT = T(0.35); me.dashMult = 3.4; } }
+});
 
 { const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
 requestAnimationFrame(loop);
