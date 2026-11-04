@@ -1265,7 +1265,8 @@ function step(s){
     if (s.tick % 30 === 0){ for (const dt of k.dots) hurt(s, k, null, dt.dps / 2); }
     for (const dt of k.dots) dt.t--;
     k.dots = k.dots.filter(dt => dt.t > 0);
-    const sp = frozen || k.aimT > 0 ? 0 : (k.focus ? FOCUS_SLOW : 1) * k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
+    const busy = k.dashT > 0 || s.slashes.some(x => x.owner === k.id) || s.dashes.some(x => x.owner === k.id);   // (v2.26) 앞선 행동(달려들기·휘두르기·돌진)이 끝나기 전엔 정신집중 감속 안 함
+    const sp = frozen || k.aimT > 0 ? 0 : (k.focus && !busy ? FOCUS_SLOW : 1) * k.spd * (1 + ACCEL_STEP * (k.accel || 0)) * (k.dashT > 0 ? k.dashMult : 1) * (k.slowT > 0 ? k.slowMult : 1) * (k.hasteT > 0 ? k.hasteMult : 1) * (1 - 0.1 * k.chill) * (k.wetT > 0 ? 0.85 : 1); if (k.dashT > 0) k.dashT--;
     k.x += k.hx * sp; k.y += k.hy * sp;
     let wall = false;
     if (k.x < k.R){ k.x = k.R; k.hx = Math.abs(k.hx); wall = true; }
@@ -3757,7 +3758,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.25";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.26";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
