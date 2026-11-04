@@ -3105,13 +3105,13 @@ const wab = (eff, m) => ({ eff, lvMul: m || 1, act: "cast" });
 // fire(s, me, foe, dur): dur = 행동 시간(초) — 스킬의 지속 효과에 씀
 const CARDS = {
   // ---- 공격 ----
-  club:    { name: "나무 몽둥이", icon: "🪵", type: "atk", cast: 3, focus: 2.5, rar: 0, desc: "달려들어 내리침 (피해 6)", fire: (s, me, foe) => EFF.stick(s, me, foe, wab("stick", 1.2)) },
+  club:    { name: "나무 몽둥이", icon: "🪵", type: "atk", cast: 2, focus: 2, rar: 0, desc: "달려들어 내리침 (피해 6)", fire: (s, me, foe) => EFF.stick(s, me, foe, wab("stick", 1.2)) },
   slash:   { name: "베기", icon: "🗡", type: "atk", cast: 2, focus: 1.2, rar: 1, desc: "달려들어 벰 (피해 6)", fire: (s, me, foe) => wSlash(s, me, foe, wab("stick"), pw(me, 6, wab("stick")), 70) },
   bash:    { name: "몸통 박치기", icon: "🐗", type: "atk", cast: 1.5, focus: 0, rar: 1, desc: "집중 없이 돌진 (피해 6 × 속도)", fire: (s, me, foe) => EFF.dash(s, me, foe, wab("dash", 0.38)) },
   spear:   { name: "투척창", icon: "🔱", type: "atk", cast: 2.5, focus: 1.5, rar: 1, desc: "모든 적을 꿰뚫는 창 (피해 7)", fire: (s, me, foe) => wShot(me, wab("stick"), 7, 11, 160, 0, 7, "#e8e8e8", 0, { pierceAll: true }) },
   hook:    { name: "갈고리", icon: "🪝", type: "atk", cast: 1.5, focus: 0.5, rar: 1, desc: "적을 끌어옴 (피해 4)", fire: (s, me, foe) => EFF.hook(s, me, foe, wab("hook", 0.5)) },
   flurry:  { name: "난타", icon: "⚔", type: "atk", cast: 3, focus: 1, rar: 2, desc: "세 번 연달아 벰 (3 × 3)", fire: (s, me, foe) => { for (let i = 0; i < 3; i++) wSlash(s, me, foe, wab("stick"), pw(me, 3, wab("stick")), 70); } },
-  heavy:   { name: "강타", icon: "🔨", type: "atk", cast: 3.5, focus: 3, rar: 2, desc: "주변을 내리침 (피해 12, 범위 90) + 적 둔화", fire: (s, me, foe) => EFF.hammer(s, me, foe, wab("hammer", 0.4)) },
+  heavy:   { name: "지면 강타", icon: "🔨", type: "atk", cast: 3.5, focus: 3, rar: 2, desc: "주변을 내리침 (피해 12, 범위 90) + 적 둔화", fire: (s, me, foe) => EFF.hammer(s, me, foe, wab("hammer", 0.4)) },
   sniper:  { name: "저격", icon: "🔭", type: "atk", cast: 3.5, focus: 3, rar: 2, desc: "즉시 명중, 멀수록 강함 (최대 24)", fire: (s, me, foe) => EFF.sniper(s, me, foe, wab("sniper", 0.34)) },
   vortex:  { name: "회오리", icon: "🌀", type: "atk", cast: 2.5, focus: 1.5, rar: 2, desc: "4초간 적을 빨아들이며 피해", fire: (s, me, foe) => EFF.vortex(s, me, foe, wab("vortex", 0.45)) },
   flamer:  { name: "화염 방사", icon: "🔥", type: "atk", cast: 3, focus: 1, rar: 2, desc: "1.5초간 앞쪽에 불길", fire: (s, me, foe) => EFF.flamer(s, me, foe, wab("flamer", 0.45)) },
@@ -3180,7 +3180,8 @@ const CARDS = {
   sidestep:{ name: "옆걸음", icon: "👣", type: "skill", cast: 0.5, focus: 0, rar: 1, desc: "옆으로 살짝 비켜섬", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(foe.y - me.y, foe.x - me.x) + (s.rng() < 0.5 ? 1.57 : -1.57); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.25); me.dashMult = 2.5; } },
   brace:   { name: "웅크리기", icon: "🐢", type: "skill", cast: 1, focus: 0, rar: 1, desc: "시전 동안 받는 피해 -50%", fire: (s, me, foe, dur) => { me.guardT = T(dur); } },
   breath:  { name: "숨 고르기", icon: "😮‍💨", type: "skill", cast: 0.8, focus: 0.5, rar: 1, desc: "체력 3% 회복", fire: (s, me, foe, dur, m = 1) => { const h = Math.round(me.maxHp * 0.03 * m); me.hp = Math.min(me.maxHp, me.hp + h); popS(s, me.x, me.y - me.R - 14, "+" + fmt(h)); } },
-  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 0, rar: 0, desc: "보호막 3 (이번 패턴 동안)", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 3 * m) },
+  guard:   { name: "수비 태세", icon: "🛡", type: "skill", cast: 2, focus: 1, rar: 0, desc: "보호막 5 (이번 라운드 동안)", fire: (s, me, foe, dur, m = 1) => v2Shield(s, me, 5 * m) },
+  bashS:   { name: "강타", icon: "🔨", type: "atk", cast: 4, focus: 2, rar: 0, desc: "달려들어 내리침 (피해 8) + 맞은 적에게 취약 2", fire: (s, me, foe) => { EFF.stick(s, me, foe, wab("stick", 1.6)); me.vulnHit = { n: 2, until: s.tick + T(0.8) }; } },
   ghost:   { name: "유령화", icon: "👻", type: "skill", cast: 1.5, focus: 0, rar: 3, desc: "시전 동안 모든 공격을 피함", fire: (s, me, foe, dur) => { me.invulnT = Math.max(me.invulnT, T(dur)); } },
   buffer:  { name: "완충", icon: "🔰", type: "skill", cast: 1, focus: 0.5, rar: 2, desc: "다음 직접 공격 1번을 완전히 막음", fire: (s, me, foe, dur, m = 1) => { me.blockN = (me.blockN || 0) + (m > 1 ? 2 : 1); } },
   evade:   { name: "회피", icon: "💨", type: "skill", cast: 1, focus: 0, rar: 1, desc: "적 반대쪽으로 빠르게 물러남", fire: (s, me, foe) => { if (foe){ const a = Math.atan2(me.y - foe.y, me.x - foe.x); me.hx = Math.cos(a); me.hy = Math.sin(a); } me.dashT = T(0.4); me.dashMult = 3; } },
@@ -3213,10 +3214,10 @@ Object.assign(CARDS, {
   hone:    { name: "날 세우기", icon: "🔪", type: "power", cast: 2, focus: 1.5, rar: 2, desc: "이번 전투 동안 내 공격 1번마다 피해 +1 (연타일수록 이득)", fire: (s, me, foe, dur, m = 1) => { me.flatAtk = (me.flatAtk || 0) + (m > 1 ? 2 : 1); } },
   shieldart:{ name: "방패술", icon: "🛡", type: "power", cast: 2, focus: 1.5, rar: 2, desc: "이번 전투 동안 보호막을 얻을 때마다 +2", fire: (s, me, foe, dur, m = 1) => { me.dex = (me.dex || 0) + (m > 1 ? 3 : 2); } },
   brink:   { name: "벼랑 끝", icon: "💀", type: "power", cast: 2, focus: 1.5, rar: 3, desc: "이번 전투 동안 잃은 체력이 최대 체력의 10%일 때마다 힘 +1 (회복해도 줄지 않음)", fire: (s, me, foe, dur, m = 1) => { me.brinkM = (me.brinkM || 0) + m; } },
-  bane:    { name: "골칫거리", icon: "🕸", type: "curse", cast: 3, focus: 0, rar: 0, must: true, exhaust: true, noRemove: true, desc: "아무 일도 안 함. 덱에서 지울 수 없음", fire: () => {} },
+  bane:    { name: "골칫거리", icon: "🕸", type: "curse", cast: 1, focus: 0, rar: 0, must: true, exhaust: true, noRemove: true, desc: "아무 일도 안 함. 덱에서 지울 수 없음", fire: () => {} },
   _blank:  { name: "공백", icon: "⬜", type: "blank", get cast(){ return state && state.v2 ? state.v2.blankDur || 0 : 0; }, focus: 0, rar: 0, desc: "아무것도 안 하고 관성으로 움직임 (패에 다 못 올린 시간)", fire: () => {} }
 });
-const START_CARDS = ["club", "club", "club", "club", "guard", "guard", "guard", "guard", "bane"];   // (v2.17) 저주 '골칫거리' 1장 포함   // 약한 시작 덱
+const START_CARDS = ["club", "club", "club", "club", "guard", "guard", "guard", "guard", "bashS", "bane"];   // (v2.23) 슬더스 환산: 0코=1초, 1코=2초, 2코=3초 …   // (v2.17) 저주 '골칫거리' 1장 포함   // 약한 시작 덱
 // ===== 카드 강화 (데모 v2.1): 키 끝에 "+" = 강화 카드. 정신집중 -0.5초(시전도 그만큼 짧아짐), 효과 ×1.35 =====
 const UP_MUL = 1.35, CD_CACHE = {};
 const upN = n => { const v = n * UP_MUL; return v >= 2 ? Math.round(v) : +v.toFixed(1); };   // (v2.20) 2 이상은 정수로 (실제 피해·보호막도 반올림됨)
@@ -3346,6 +3347,7 @@ function v2Execute(s){
     V.hand.forEach((id, i) => { const C = CD(id), d = C.x ? Math.max(SNAP, Math.floor((B - t) / SNAP) * SNAP) : C.cast;
       if (id !== "_blank" && !v2Blocked(s, id) && t + d <= Math.min(B, L) + 1e-6){ plan.push({ i, id, start: t, fEnd: t + Math.min(d, C.focus * V.focusMul), end: t + d }); t += d; } else if (id !== "_blank") over.push(id); });
     if (over.length) V.unused = (V.unused || []).concat(over); }
+  for (const c of plan) c.fEnd = Math.min(c.fEnd, c.end - 1 / 60);   // (v2.23) 집중 = 시전 시간인 카드(몽둥이 (2)2초)도 끝나기 직전에 발동
   s.rd = { t0: s.tick, L, T: L, plan, en: s.rdPlan.en, over: false, cur: null };
   for (const b of s.balls) if (b.metal && !b.dead) v2Shield(s, b, b.metal);   // 금속화
 }
@@ -3479,7 +3481,7 @@ function renderPlan(){
   panel.innerHTML = `<div class="mbox wide"><div class="mtitle">라운드 ${V.round} · 상대 패턴 ${L}초 · 내 시간 ${+used.toFixed(1)} / ${B}초</div>
     <div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}</div></div>${enemyRows}${myRow}</div>
     <div class="handrow"><div class="pile" title="뽑을 카드">🂠<small>${V.draw.length}</small></div>${hand}<div class="pile disc" title="버린 카드">🗑<small>${V.disc.length}</small></div></div>
-    <div class="small pinfo" id="pinfo">${planInfo || `카드를 타임라인의 원하는 자리로 끌어다 놓아요(0.5초 단위) · 누르면 빈 자리 맨 앞에 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 빨간 점선 = 적 공격 순간 · 빈 곳에선 관성으로 움직여요`}</div>
+    <div class="small pinfo" id="pinfo">${planInfo || `적 행동을 누르면 효과를 볼 수 있어요 · 카드를 타임라인의 원하는 자리로 끌어다 놓아요(0.5초 단위) · 누르면 빈 자리 맨 앞에 · 타임라인 카드를 누르면 패로 · 꾹 누르면 효과 · 빨간 점선 = 적 공격 순간 · 빈 곳에선 관성으로 움직여요`}</div>
     <div class="row" style="gap:6px">${potRowHtml()}<button class="main" id="pgo" ${all ? "" : "disabled"} style="margin-left:auto;width:auto;flex:none;padding:8px 22px;font-size:14px">${all ? `▶ 실행${left > 0 ? ` (남은 ${+left.toFixed(1)}초)` : ""}` : `🕸 필수 카드를 먼저 올려 주세요`}</button></div></div>`;
   V.anim = false;
   const showInfo = id => { const C = CD(id); planInfo = `<b>${C.icon} ${C.name}</b> · 시전 ${C.x ? "X" : C.cast}초 (집중 ${(C.focus * V.focusMul).toFixed(1)}초) · ${C.desc}`; const el = document.getElementById("pinfo"); if (el) el.innerHTML = planInfo; };
@@ -3493,9 +3495,8 @@ function renderPlan(){
   };
   const setInfo = h => { planInfo = h; const el = document.getElementById("pinfo"); if (el) el.innerHTML = h; };
   panel.querySelectorAll(".tlname.en").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], e = E.ball, c = e.cfg, P = patsOf(c);
-    setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} 💪힘 ${+((e.atkBonus || 0) * 10).toFixed(1)}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
-  panel.querySelectorAll(".tlev[data-ev]").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en], v = E.evs[+el.dataset.ev], ty = actType(v.sk);
-    setInfo(`<b>${E.ball.icon} ${SK_FULL(v.sk)}</b> <span class="evc ${ty}">${{ atk: "공격", skill: "스킬", power: "파워" }[ty]}</span> · 정신집중 ${v.f}초 (${(v.t - v.f).toFixed(1)}~${v.t}초, 이때 직접 공격하면 좌절) → ${v.t}초 발동${(i => i.d != null ? ` · 예상 피해 <b>${Math.round(i.d)}${EV_PER[v.sk] || ""}</b>` : "")(evInfo(E.ball, v.sk, s.balls[0]))}${EV_BASE[v.sk] != null || v.sk === "freeze" ? (EV_TARGET.has(v.sk) ? " · 🎯 타겟팅(피할 수 없음, 막거나 끊어야 함)" : " · ↗ 논타겟팅(움직임으로 피할 수 있음)") : ""} · ${SKILL[v.sk] ? SKILL[v.sk].desc || "" : ""}`); });
+    setInfo(`<b>${e.icon} ${e.name}</b> ❤${fmt(Math.max(0, e.hp))}/${fmt(e.maxHp)} 💪힘 ${+((e.atkBonus || 0) * 10).toFixed(1)}${e.trait ? ` · ${TRAIT_TXT[e.trait] || ""}` : ""}${c.mon && MON_NOTE[c.mon] ? `<br><span style="color:#ffd27a">특성: ${MON_NOTE[c.mon]}</span>` : ""}<br>패턴 ${P.length}개: ${P.map((p, i) => `${i + 1}) ${p.len}초 ${p.ev.map(([t, sk]) => `<span class="evc ${actType(sk)}">${t}초 ${SK_LABEL(sk)}</span>`).join(" ")}`).join(" · ")}`); });
+  panel.querySelectorAll(".tlev[data-ev]").forEach(el => el.onclick = () => { const E = s.rdPlan.en[+el.dataset.en]; v2ShowEv(E.ball, E.evs[+el.dataset.ev]); });
   const bar = document.getElementById("tlmine"), drop = document.getElementById("tldrop");
   // 끌기: 손가락 위치 = 카드 가운데. 타임라인 위면 0.5초 단위로 맞춰 미리 보기(초록 = 놓을 수 있음, 빨강 = 안 됨)
   const dragger = (hi, ex, srcEl) => { let ghost = null, at = null;
@@ -3750,7 +3751,7 @@ onBattleEnd = function(){
   const done = () => { if (kind === "elite" || kind === "boss") renderRelicGain(grantRelic(r, kind === "boss" ? "rare" : "elite"), afterReward); else afterReward(); };
   renderCardReward(lines, done);
 };
-const V2_VER = "2.22";   // 화면 위 줄에 보이는 버전 (반영 확인용)
+const V2_VER = "2.23";   // 화면 위 줄에 보이는 버전 (반영 확인용)
 updateHud = function(){ const r = runState, fx = relicFx(r); hud.innerHTML = `<span style="color:#667;font-size:10px">v${V2_VER}</span> <b>${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층</b> · 💰${r.gold} · ❤${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏${r.cards ? r.cards.length : 0}`; };
 infoStats = function(){ const r = runState, fx = relicFx(r); return `<div class="card small">v2 · ${actOf(Math.min(r.floor, TOP_FLOOR))}막 ${Math.min(r.floor, TOP_FLOOR)}층 · 💰${r.gold}<br>❤ ${fmt(r.hp)}/${fmt(r.maxHp)} · 🃏 카드 ${r.cards.length}장</div>`; };
 document.getElementById("bDice").style.display = "none";
@@ -3854,12 +3855,13 @@ function v2ShowRoundPlan(){
   let ruler = ""; for (let t = 0; t <= Math.floor(T); t++) ruler += `<span class="tlt" style="left:${pct(t)}">${t}</span>`;
   const enemyRows = rd.en.map(E => `<div class="tlrow"><div class="tlname">${E.ball.icon || "👾"}</div><div class="tlbar">
       <div class="tlidle" style="left:${pct(E.pat.len)};width:${pct(T - E.pat.len)}"></div>
-      ${E.evs.map(v => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" style="left:${pct(v.t)};${v.fizzled ? "opacity:.35;text-decoration:line-through" : v.done ? "opacity:.55" : ""}"><b>${SK_LABEL(v.sk)}</b><i class="evd">${v.fizzled ? "😵좌절" : evInfo(E.ball, v.sk, s.balls[0]).txt}</i></div>`).join("")}${now}</div></div>`).join("");
+      ${E.evs.map((v, vi) => `<div class="tlef ${actType(v.sk)}" style="left:${pct(v.t - v.f)};width:${pct(v.f)}"></div><div class="tlev ${actType(v.sk)}" data-ren="${rd.en.indexOf(E)}" data-rev="${vi}" style="left:${pct(v.t)};${v.fizzled ? "opacity:.35;text-decoration:line-through" : v.done ? "opacity:.55" : ""}"><b>${SK_LABEL(v.sk)}</b><i class="evd">${v.fizzled ? "😵좌절" : evInfo(E.ball, v.sk, s.balls[0]).txt}</i></div>`).join("")}${now}</div></div>`).join("");
   const myRow = `<div class="tlrow"><div class="tlname">🙂</div><div class="tlbar mine">${rd.plan.map(c => { const C = CD(c.id), st = c.fizzled ? "opacity:.35" : c.fired ? "opacity:.55" : "";
       return `<div class="tlcard ${C.type}${rd.cur === c ? " sel" : ""}" style="left:${pct(c.start)};width:${pct(c.end - c.start)};${st}"><span class="tlfocus" style="width:${((c.fEnd - c.start) / Math.max(0.01, c.end - c.start) * 100).toFixed(1)}%"></span><span class="tlcn">${C.icon}${C.name}${c.fizzled ? " 😵" : ""}<br><small>${(c.end - c.start).toFixed(1)}초</small></span></div>`; }).join("")}${now}</div></div>`;
   openInfo(`⏸ 라운드 ${s.v2.round} · 지금 ${rt.toFixed(1)} / ${T}초`,
     `<div class="tl"><div class="tlrow"><div class="tlname"></div><div class="tlbar ruler">${ruler}<div class="tlarrow" style="left:${pct(rt)}">▼</div></div></div>${enemyRows}${myRow}</div>
-     <div class="small" style="margin-top:6px">노란 선 = 지금 · 흐린 칸 = 이미 지나감 · 😵 = 좌절 · 닫으면 이어서 진행</div>`, el => {
+     <div class="small" style="margin-top:6px">노란 선 = 지금 · 흐린 칸 = 이미 지나감 · 😵 = 좌절 · <b>적 행동을 누르면 효과</b> · 닫으면 이어서 진행</div><div id="rpev"></div>`, el => {
+      el.querySelectorAll(".tlev[data-rev]").forEach(b => b.onclick = ev => { ev.stopPropagation(); const E = rd.en[+b.dataset.ren], v = E.evs[+b.dataset.rev]; document.getElementById("rpev").innerHTML = `<div class="card" style="margin-top:6px;padding:6px 9px">${v2EvHtml(E.ball, v, s.balls[0])}</div>`; });
       const close = () => { closeInfo(); paused = wasPaused; }; document.getElementById("infoX").onclick = close; el.onclick = e => { if (e.target === el) close(); }; });
 }
 { const prevClick = cv.onclick;
@@ -3912,7 +3914,9 @@ const nowR = s => s.rd ? (s.tick - s.rd.t0) / 60 : 0;
 let MACT_N = 0;
 function mAct(spec){   // spec: { name, kind: "hit"|"shot"|"sure"|"none", d, n, dyn(s,me,P), focus, type: "atk"|"skill"|"power", fx(s,me,P) }
   const id = "m" + (++MACT_N), kind = spec.kind || "none", type = spec.type || (spec.d != null || spec.dyn ? "atk" : "skill");
-  SKILL[id] = { label: spec.name, desc: spec.desc || "", g: type === "atk" ? "공격" : "보조", rar: 0, enemy: true, attrs: ["normal"], v2: { kind, d: spec.d, n: spec.n || 1, dyn: spec.dyn, focus: spec.focus, type } };
+  const fxT = spec.t || (spec.fx && spec.fx.t) || "";
+  const atkT = spec.d == null && !spec.dyn ? "" : (kind === "hit" ? "몸통 돌진 피해 " : kind === "shot" ? "투사체 피해 " : "확정 피해 ") + (spec.dtxt || spec.d) + ((spec.n || 1) > 1 ? ` × ${spec.n}번` : "");
+  SKILL[id] = { label: spec.name, desc: spec.desc || [atkT, fxT].filter(Boolean).join(" + ") || "행동 없음", g: type === "atk" ? "공격" : "보조", rar: 0, enemy: true, attrs: ["normal"], v2: { kind, d: spec.d, n: spec.n || 1, dyn: spec.dyn, focus: spec.focus, type } };
   if (type === "power") ENEMY_POWER.push(id);
   EFF[id] = (s, me, foe) => { const P = s.balls[0]; if (P.dead) return; const base = spec.dyn ? spec.dyn(s, me, P) : spec.d;
     if (base != null){
@@ -3930,11 +3934,13 @@ const MA = {   // 자주 쓰는 행동
   sure: (name, d, n, extra) => mAct({ name, kind: "sure", d, n, ...(extra || {}) }),
   fx: (name, fx, type, extra) => mAct({ name, fx, type: type || "skill", ...(extra || {}) })
 };
-const fxBlock = n => (s, me) => v2Shield(s, me, n);
-const fxStr = n => (s, me) => v2Str(s, me, n);
-const fxDeb = (key, n) => (s, me, P) => v2Debuff(s, P, key, n);
-const fxCards = (id, n, where) => s => v2AddCards(s, id, n, where);
-const fxAll = (...fs) => (s, me, P) => fs.forEach(f => f(s, me, P));
+const tagT = (f, t) => (f.t = t, f);   // 효과 함수에 설명(t)을 붙임 → 타임라인에서 누르면 보임
+const DEB_T = { vulnR: ["💔취약", "받는 공격 피해 +50%"], weakR: ["🥀약화", "주는 공격 피해 -25%"], frailR: ["🫥허약", "얻는 보호막 -25%"], entangleR: ["🕸속박", "공격 카드를 못 올림"] };
+const fxBlock = n => tagT((s, me) => v2Shield(s, me, n), `자기 보호막 ${n}`);
+const fxStr = n => tagT((s, me) => v2Str(s, me, n), `자기 힘 +${n} (공격 피해 +${n * 10}%, 영구)`);
+const fxDeb = (key, n) => tagT((s, me, P) => v2Debuff(s, P, key, n), `나에게 ${DEB_T[key][0]} ${n}라운드 (${DEB_T[key][1]})`);
+const fxCards = (id, n, where) => tagT(s => v2AddCards(s, id, n, where), `내 버린 더미에 '${CARDS[id].icon}${CARDS[id].name}' ${n}장 섞기 (${CARDS[id].desc.replace(/^〔[^〕]*〕 ?/, "")})`);
+const fxAll = (...fs) => tagT((s, me, P) => fs.forEach(f => f(s, me, P)), fs.map(f => f.t).filter(Boolean).join(" + "));
 // 순서 규칙
 const pickW = (s, ws) => { const tot = ws.reduce((a, w) => a + w, 0); let x = s.rng() * tot; for (let i = 0; i < ws.length; i++){ x -= ws[i]; if (x <= 0) return i; } return ws.length - 1; };
 const O = {
@@ -3952,11 +3958,11 @@ const MON = {
   jaw:    { name: "턱벌레", icon: "🪱", art: "rusher", color: "#b07a50", hp: 28, R: 22, order: O.rand({ first: 0, max: 1 }),
     pats: [P10([4, MA.hit("물기", 11)]), P10([3, MA.hit("휘두르기", 7)], [7, MA.fx("웅크림", fxBlock(5))]), P10([5, MA.fx("포효", fxAll(fxStr(3), fxBlock(6)), "power")])] },
   cultist:{ name: "광신도", icon: "🕯", art: "cultist", color: "#8a6a3a", hp: 34, R: 22, order: (e, s, m) => m.n === 0 ? 0 : 1,
-    pats: [P10([3, MA.fx("의식", (s, me) => { me.ritualN = (me.ritualN || 0) + 3; }, "power")], [7, MA.hit("어둠 찌르기", 6)]), P10([5, MA.hit("어둠 찌르기", 6)])] },
+    pats: [P10([3, MA.fx("의식", (s, me) => { me.ritualN = (me.ritualN || 0) + 3; }, "power", { t: "의식 3: 다음 라운드부터 라운드가 시작될 때마다 자기 힘 +3 (계속 쌓임)" })], [7, MA.hit("어둠 찌르기", 6)]), P10([5, MA.hit("어둠 찌르기", 6)])] },
   louseR: { name: "빨간 이", icon: "🐜", art: "berserk", color: "#d04a4a", hp: [10, 12], R: 16, order: O.rand({ max: 2 }), init: (e, s) => { e.biteD = 5 + Math.floor(s.rng() * 3); e.curl = 5; },
-    pats: [P8([4, mAct({ name: "물기", kind: "hit", dyn: (s, me) => me.biteD })]), P8([4, MA.fx("성장", fxStr(3), "power")])] },
+    pats: [P8([4, mAct({ name: "물기", kind: "hit", dtxt: "5~7 (개체마다 정해짐)", dyn: (s, me) => me.biteD })]), P8([4, MA.fx("성장", fxStr(3), "power")])] },
   louseG: { name: "초록 이", icon: "🐜", art: "venom", color: "#4aa04a", hp: [11, 13], R: 16, order: O.rand({ max: 2 }), init: (e, s) => { e.biteD = 5 + Math.floor(s.rng() * 3); e.curl = 5; },
-    pats: [P8([4, mAct({ name: "물기", kind: "hit", dyn: (s, me) => me.biteD })]), P8([4, MA.fx("거미줄", fxDeb("weakR", 2))])] },
+    pats: [P8([4, mAct({ name: "물기", kind: "hit", dtxt: "5~7 (개체마다 정해짐)", dyn: (s, me) => me.biteD })]), P8([4, MA.fx("거미줄", fxDeb("weakR", 2))])] },
   acidM:  { name: "산성 슬라임(중)", icon: "🟢", art: "slime", color: "#5ad07a", hp: 20, R: 20, order: O.rand(),
     pats: [P10([4, MA.shot("부식 침", 7, { fx: fxCards("slimed", 1) })]), P10([4, MA.hit("몸통", 10)]), P10([4, MA.fx("핥기", fxDeb("weakR", 1))])] },
   spikeM: { name: "가시 슬라임(중)", icon: "🟣", art: "slime", color: "#b07ad0", hp: 20, R: 20, order: O.rand(),
@@ -3972,38 +3978,38 @@ const MON = {
   slaverB:{ name: "파란 노예상", icon: "⛓", art: "duelist", color: "#4a7ad0", hp: 31, R: 22, order: O.rand({ max: 2 }),
     pats: [P10([4, MA.hit("찌르기", 12)]), P10([4, MA.hit("할퀴기", 7, { fx: fxDeb("weakR", 1) })])] },
   slaverR:{ name: "빨간 노예상", icon: "⛓", art: "duelist", color: "#d04a4a", hp: 31, R: 22, order: O.rand({ first: 0, once: [2] }),
-    pats: [P10([4, MA.hit("찌르기", 13)]), P10([4, MA.hit("긁기", 8, { fx: fxDeb("vulnR", 1) })]), P10([3, MA.fx("그물", (s, me, P) => { P.entangleR = 2; popS(s, P.x, P.y - P.R - 30, "🕸속박"); })], [7, MA.hit("찌르기", 13)])] },
+    pats: [P10([4, MA.hit("찌르기", 13)]), P10([4, MA.hit("긁기", 8, { fx: fxDeb("vulnR", 1) })]), P10([3, MA.fx("그물", (s, me, P) => v2Debuff(s, P, "entangleR", 1), "skill", { t: "나에게 🕸속박: 다음 라운드에 공격 카드를 못 올림" })], [7, MA.hit("찌르기", 13)])] },
   fungi:  { name: "버섯 짐승", icon: "🍄", art: "doom", color: "#c06a8a", hp: 16, R: 20, order: O.rand({ max: 2 }), onDeath: (s, e) => v2Debuff(s, s.balls[0], "vulnR", 2),
     pats: [P10([4, MA.hit("물기", 6)]), P10([4, MA.fx("성장", fxStr(3), "power")])] },
   looter: { name: "약탈자", icon: "💰", art: "archer", color: "#8a7a4a", hp: 30, R: 22, order: (e, s, m) => [0, 0, 1, 2][Math.min(3, m.n)],
-    pats: [P10([4, MA.sure("강탈", 10, 1, { onHit: (s, me) => v2Steal(s, me, 15) })]), P10([4, MA.hit("돌진", 12)]), P10([2, MA.fx("연막", fxBlock(6))], [9, MA.fx("도망", (s, me) => v2Escape(s, me))])] },
+    pats: [P10([4, MA.sure("강탈", 10, 1, { onHit: (s, me) => v2Steal(s, me, 15), t: "골드 15 훔침 (쓰러뜨리면 돌려받음, 도망가면 못 받음)" })]), P10([4, MA.hit("돌진", 12)]), P10([2, MA.fx("연막", fxBlock(6))], [9, MA.fx("도망", (s, me) => v2Escape(s, me), "skill", { t: "전투에서 도망 — 훔친 골드는 사라짐" })])] },
   gFat:   { name: "뚱보 그렘린", icon: "👺", art: "tank", color: "#a08a5a", hp: 9, R: 18, order: O.cycle(), pats: [P8([4, MA.hit("내려치기", 4, { fx: fxDeb("weakR", 1) })])] },
   gSneak: { name: "교활한 그렘린", icon: "👺", art: "duelist", color: "#6a8a5a", hp: 8, R: 16, order: O.cycle(), pats: [P8([4, MA.hit("찌르기", 9)])] },
   gMad:   { name: "미친 그렘린", icon: "👺", art: "berserk", color: "#c05a3a", hp: 14, R: 18, order: O.cycle(), init: e => { e.angry = 1; }, pats: [P8([4, MA.hit("할퀴기", 4)])] },
   gShield:{ name: "방패 그렘린", icon: "👺", art: "paladin", color: "#7a8aa0", hp: 9, R: 18, order: (e, s) => s.balls.some(b => b.id !== 0 && b !== e && !b.dead) ? 0 : 1,
-    pats: [P8([4, MA.fx("보호", (s, me) => { const o = s.balls.filter(b => b.id !== 0 && b !== me && !b.dead); if (o.length) v2Shield(s, o[Math.floor(s.rng() * o.length)], 7); })]), P8([4, MA.hit("방패 치기", 6)])] },
+    pats: [P8([4, MA.fx("보호", (s, me) => { const o = s.balls.filter(b => b.id !== 0 && b !== me && !b.dead); if (o.length) v2Shield(s, o[Math.floor(s.rng() * o.length)], 7); }, "skill", { t: "다른 적 하나에게 보호막 7" })]), P8([4, MA.hit("방패 치기", 6)])] },
   gWiz:   { name: "그렘린 마법사", icon: "👺", art: "warlock", color: "#6a4aa0", hp: 15, R: 18, order: (e, s, m) => { if ((m.c || 0) >= 2){ m.c = 0; return 1; } m.c = (m.c || 0) + 1; return 0; },
-    pats: [P8([4, MA.fx("충전", () => {})]), P8([5, MA.sure("궁극 화염", 25, 1, { focus: 2 })])] },
+    pats: [P8([4, MA.fx("충전", () => {}, "skill", { t: "마력을 모음 (행동 없음). 2번 모은 다음 라운드에 궁극 화염 25" })]), P8([5, MA.sure("궁극 화염", 25, 1, { focus: 2 })])] },
   // ---- 정예 ----
   nob:    { name: "그렘린 대장", icon: "👹", art: "berserk", color: "#b03a3a", hp: 54, R: 26, elite: true, order: O.rand({ first: 0, w: [0, 2, 1], max: 2 }),
-    pats: [P10([3, MA.fx("고함", (s, me) => { me.enrage = (me.enrage || 0) + 2; }, "power")]), P10([4, MA.hit("돌진", 14)]), P10([4, MA.hit("두개골 강타", 6, { fx: fxDeb("vulnR", 2) })])] },
+    pats: [P10([3, MA.fx("고함", (s, me) => { me.enrage = (me.enrage || 0) + 2; }, "power", { t: "격분: 이후 내가 스킬 카드를 낼 때마다 대장의 힘 +2" })]), P10([4, MA.hit("돌진", 14)]), P10([4, MA.hit("두개골 강타", 6, { fx: fxDeb("vulnR", 2) })])] },
   laga:   { name: "라가불린", icon: "🐢", art: "tank", color: "#5a7a6a", hp: 72, R: 28, elite: true, order: O.cycle(), init: e => { e.asleep = 3; e.metal = 8; e.spd0 = e.spd; e.spd = 0; },
-    pats: [P10([4, MA.hit("내려찍기", 18)]), P10([4, MA.hit("내려찍기", 18)]), P10([5, MA.fx("영혼 흡수", (s, me, P) => { v2Str(s, P, -1); P.dex = (P.dex || 0) - 1; }, "power")])] },
+    pats: [P10([4, MA.hit("내려찍기", 18)]), P10([4, MA.hit("내려찍기", 18)]), P10([5, MA.fx("영혼 흡수", (s, me, P) => { v2Str(s, P, -1); P.dex = (P.dex || 0) - 1; }, "power", { t: "나에게 힘 -1, 방패술 -1 (이번 전투 동안)" })])] },
   sentry: { name: "보초기", icon: "🗼", art: "clock", color: "#c8b080", hp: 26, R: 20, elite: true, order: (e, s, m) => ((e.cfg.slot === 1 ? 1 : 0) + m.n) % 2, init: e => { e.artifact = 1; },
     pats: [P10([4, MA.fx("볼트", fxCards("dazed", 2))]), P10([4, MA.shot("빔", 9)])] },
   // ---- 보스 ----
   slimeK: { name: "슬라임 왕", icon: "👑", art: "slime", color: "#4ac06a", hp: 91, R: 34, boss: true, order: O.cycle(), split: ["acidL", "spikeL"],
-    pats: [P10([4, MA.fx("점액 뿌리기", fxCards("slimed", 3))]), P10([5, MA.fx("준비", () => {})]), P10([5, MA.hit("내려찍기", 35, { focus: 2 })])] },
+    pats: [P10([4, MA.fx("점액 뿌리기", fxCards("slimed", 3))]), P10([5, MA.fx("준비", () => {}, "skill", { t: "다음 라운드 내려찍기 35를 준비 (행동 없음)" })]), P10([5, MA.hit("내려찍기", 35, { focus: 2 })])] },
   guardian:{ name: "수호자", icon: "🛡", art: "paladin", color: "#8a9ab0", hp: 156, R: 32, boss: true, init: e => { e.mode = "atk"; e.modeDmg = 0; e.modeThr = 20; },
     order: (e, s, m) => { if (e.mode === "def"){ m.dn = (m.dn || 0) + 1; if (m.dn === 1) return 4; if (m.dn === 2) return 5; e.mode = "atk"; e.v2thorns = 0; e.modeDmg = 0; m.an = 0; }
       const i = (m.an || 0) % 4; m.an = (m.an || 0) + 1; return i; },
     pats: [P10([3, MA.fx("충전", fxBlock(9))]), P10([5, MA.hit("강타", 32, { focus: 2 })]), P10([4, MA.fx("증기", fxAll(fxDeb("weakR", 2), fxDeb("vulnR", 2)))]), P10([4, MA.sure("회오리", 5, 4)]),
       P10([4, MA.hit("굴러 박기", 9)]), P10([4, MA.sure("연타", 8, 2)])] },
   hexa:   { name: "육각령", icon: "👻", art: "pyro", color: "#6ad0ff", hp: 163, R: 32, boss: true, order: (e, s, m) => m.n === 0 ? 0 : m.n === 1 ? 1 : 2 + (m.n - 2) % 7,
-    pats: [P10([5, MA.fx("활성", () => {})]), P10([5, mAct({ name: "분할", kind: "sure", n: 6, focus: 2, dyn: (s, me, P) => Math.floor(P.hp / 14) + 1 })]),
+    pats: [P10([5, MA.fx("활성", () => {}, "skill", { t: "깨어남 (행동 없음). 다음 라운드에 분할 공격" })]), P10([5, mAct({ name: "분할", kind: "sure", n: 6, focus: 2, dtxt: "(내 현재 체력 ÷ 14 + 1)", dyn: (s, me, P) => Math.floor(P.hp / 14) + 1 })]),
       P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]), P10([4, MA.sure("몸통", 5, 2)]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
       P10([4, MA.fx("강화", fxAll(fxStr(2), fxBlock(12)), "power")]), P10([4, MA.sure("몸통", 5, 2)]), P10([4, MA.sure("그을림", 6, 1, { fx: fxCards("burnc", 1) })]),
-      P10([5, MA.sure("지옥불", 2, 6, { fx: s => { s.v2.burnUp = true; } })])] }
+      P10([5, MA.sure("지옥불", 2, 6, { fx: s => { s.v2.burnUp = true; }, t: "내 덱의 🔥화상 카드 강화 (손에 남으면 피해 2 → 4)" })])] }
 };
 function v2Steal(s, me, n){ const r = runState, a = Math.min(n, r.gold || 0); if (a <= 0) return; r.gold -= a; me.stolen = (me.stolen || 0) + a; popS(s, me.x, me.y - me.R - 30, `💰-${a}`); updateHud(); }
 function v2Escape(s, me){ me.escaped = true; me.dead = true; me.hp = 0; s.booms.push({ x: me.x, y: me.y, r: 40, t: 0, col: "#aaa" }); popS(s, me.x, me.y - me.R - 14, "💨도망!"); }
@@ -4054,6 +4060,7 @@ function v2Split(s, e){   // 분열: 남은 체력을 각자 가진 둘로
 const hurtV2 = hurt;
 hurt = function(s, tgt, src, amount, sk){
   const hp0 = tgt.hp; const res = hurtV2(s, tgt, src, amount, sk); const dealt = Math.max(0, hp0 - tgt.hp);
+  if (s.v2 && src && src.id === 0 && tgt.id !== 0 && src.vulnHit && sk === "stick" && s.tick <= src.vulnHit.until && tgt.hp > 0){ v2Debuff(s, tgt, "vulnR", src.vulnHit.n); src.vulnHit = null; }   // 강타: 맞힌 적에게 취약
   if (s.v2 && tgt.id !== 0 && src && src.id === 0 && !tgt.dead){
     if (tgt.curl && dealt > 0){ const c = tgt.curl; tgt.curl = 0; v2Shield(s, tgt, c); popS(s, tgt.x, tgt.y - tgt.R - 30, "🐚웅크리기"); }
     if (tgt.angry && dealt > 0) v2Str(s, tgt, tgt.angry);
@@ -4093,6 +4100,34 @@ const stepMon = step;
 step = function(s){ stepMon(s); if (s.v2) v2MonTick(s); };
 const newRunMon = newRun;
 newRun = function(seed){ const r = newRunMon(seed); beginFloor(r, "normal"); return r; };
+
+// ===== (v2.23) 적 행동 자세히 보기: 타임라인의 적 행동을 누르면 창으로 =====
+const MON_NOTE = {
+  louseR: "🐚 몸 말기 5 — 처음 피해를 입으면 보호막 5 (1번)", louseG: "🐚 몸 말기 5 — 처음 피해를 입으면 보호막 5 (1번)",
+  acidL: "🟢 분열 — 체력이 절반 이하가 되면 하던 행동을 멈추고, 다음 라운드에 산성 슬라임(중) 2마리로 갈라짐 (각자 남은 체력)",
+  spikeL: "🟣 분열 — 체력이 절반 이하가 되면 다음 라운드에 가시 슬라임(중) 2마리로 갈라짐 (각자 남은 체력)",
+  slimeK: "👑 분열 — 체력이 절반 이하가 되면 다음 라운드에 산성(대)+가시(대)로 갈라짐 (각자 남은 체력)",
+  fungi: "🍄 죽을 때 포자 — 쓰러지면 나에게 💔취약 2", looter: "💰 강탈한 골드는 쓰러뜨리면 돌려받음. 4번째 라운드에 도망",
+  gMad: "😡 분노 1 — 피해를 입을 때마다 힘 +1", gShield: "동료가 있으면 동료에게 보호막, 혼자 남으면 직접 공격",
+  gWiz: "충전 2번 → 궁극 화염 25 (집중 2초 동안 끊으면 취소)", nob: "😠 고함 이후 격분 — 내가 스킬 카드를 낼 때마다 힘 +2 (공격 카드는 괜찮음)",
+  laga: "💤 처음 3라운드 잠 (금속화 8: 라운드마다 보호막 8). 맞아서 깨면 다음 라운드는 기절. 깨면 금속화 사라짐",
+  sentry: "🔷 인공물 1 — 해로운 효과 1번 무효. 양쪽은 볼트부터, 가운데는 빔부터 번갈아",
+  guardian: "⚙ 공격 모드에서 피해 20을 받으면 방어 모드(보호막 20, 🌵가시 4: 때리면 나도 4 피해). 방어 모드 2라운드 뒤 공격 모드로, 문턱 +10",
+  hexa: "첫 라운드 활성 → 분할(내 체력 비례 6연타) → 이후 7가지 행동 순환. 🔥화상 카드를 계속 섞음",
+  cultist: "첫 라운드에 의식 → 그 다음부터 라운드마다 힘 +3"
+};
+function v2EvHtml(e, v, P){
+  const ty = actType(v.sk), S = SKILL[v.sk] || {}, M2 = S.v2, i = evInfo(e, v.sk, P), tyN = { atk: "공격", skill: "스킬", power: "파워" }[ty];
+  const dodge = M2 ? (i.d != null ? (i.tg ? "🎯 확정 — 피할 수 없음. 보호막으로 막거나, 정신집중 중에 직접 공격해서 끊어야 함" : "↗ 논타겟팅 — 움직임(빈 시간)으로 피할 수 있음") : "")
+    : (EV_BASE[v.sk] != null || v.sk === "freeze" ? (EV_TARGET.has(v.sk) ? "🎯 타겟팅 — 피할 수 없음, 막거나 끊어야 함" : "↗ 논타겟팅 — 움직임으로 피할 수 있음") : "");
+  return `<div style="font-size:14px"><b>${e.icon || ""} ${e.name} — ${S.label || v.sk}</b> <span class="evc ${ty}">${tyN}</span></div>
+    <div class="small" style="margin-top:4px">📜 <b>효과:</b> ${S.desc || "-"}</div>
+    ${i.d != null ? `<div class="small">⚔ <b>지금 맞으면:</b> ${Math.max(1, Math.round(i.d))}${i.n > 1 ? ` × ${i.n}번 = ${Math.max(1, Math.round(i.d)) * i.n}` : ""}${EV_PER[v.sk] || ""} <span style="opacity:.7">(적 힘·약화, 내 취약·방어 반영)</span></div>` : ""}
+    ${dodge ? `<div class="small">${dodge}</div>` : ""}
+    <div class="small">⏱ ${(v.t - v.f).toFixed(1)}초부터 정신집중 ${v.f}초 → <b>${v.t}초에 발동</b> · 집중 중에 내 직접 공격에 맞으면 😵좌절(취소)</div>
+    ${e.cfg && MON_NOTE[e.cfg.mon] ? `<div class="small" style="color:#ffd27a">특성: ${MON_NOTE[e.cfg.mon]}</div>` : ""}`;
+}
+function v2ShowEv(e, v){ openInfo("적 행동", v2EvHtml(e, v, state.balls[0])); }
 
 { const sv = loadGame(); if (sv){ runState = sv.r; state = null; prepNote = `💾 ${sv.r.floor}층 이어하기`; if (sv.where === "route") renderRoute(); else renderPrep(); } else newGame(); }
 requestAnimationFrame(loop);
